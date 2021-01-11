@@ -20,10 +20,10 @@ module Corize (T : Target) : Target = struct
 
   type extern = state pre_extern
 
-  let value_of_field (init_fs : (string * coq_Value) list)
-                     ((MkFieldType (f, t)): coq_FieldType) : string * coq_Value =
+  let value_of_field (init_fs : (P4string.t * coq_Value) list)
+                     ((MkFieldType (f, t)): coq_FieldType) : P4string.t * coq_Value =
     f,
-    List.Assoc.find_exn init_fs f ~equal:String.equal
+    List.Assoc.find_exn init_fs f ~equal:P4string.eq
 
   let nbytes_of_hdr (fs : (string * coq_ValueBase) list) : Bigint.t =
     fs

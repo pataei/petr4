@@ -207,29 +207,29 @@ and init_val_of_constr (ct : ConstructorType.t) : value =
 and init_val_of_table (tt : TableType.t) : value =
   failwith "init vals unimplemented for table  types"
 
-let rec width_of_val v =
+let rec width_of_val (v: coq_ValueBase) =
   let field_width (name, value) =
     width_of_val value
   in
   match v with
-  | VBit {w;_}
-  | VInt {w;_}
-  | VVarbit{w;_} ->
-      w
-  | VNull ->
-      Bigint.zero
-  | VBool _ ->
-      Bigint.one
-  | VStruct {fields}
-  | VHeader {fields; _} ->
-      fields
-      |> List.map ~f:field_width
-      |> List.fold ~init:Bigint.zero ~f:Bigint.(+)
-  | VSenumField {v; _} ->
+  | ValBaseBit (w, _)
+  | ValBaseInt (w, _)
+  | ValBaseVarbit (w, _, _) ->
+    w
+  | ValBaseNull ->
+    0
+  | ValBaseBool _ ->
+    1
+  | ValBaseStruct fields
+  | ValBaseHeader (fields, _) ->
+    fields
+    |> List.map ~f:field_width
+    |> List.fold ~init:0 ~f:(+)
+  | ValBaseSenumField (_, _, v) ->
       width_of_val v
-  | VInteger _ -> failwith "width of VInteger"
-  | VUnion _ -> failwith "width of header union unimplemented"
-  | _ -> raise_s [%message "width of type unimplemented" ~v:(v: Value.value)]
+  | ValBaseInteger _ -> failwith "width of VInteger"
+  | ValBaseUnion _ -> failwith "width of header union unimplemented"
+  | _ -> raise_s [%message "width of type unimplemented" ~v:(v: coq_BaseValue)]
 
 let rec value_of_lvalue (reader : 'a reader) (env : env) (st : 'a State.t)
     (lv : lvalue) : signal * value =
