@@ -24,8 +24,8 @@ module type Parse_config = sig
 end
 
 (* This is a stand-in for Pretty.format_program *)
-let pretty p =
-  failwith "Sorry, I yanked the pretty-printer out while I was refactoring. Feel free to put it back - Ryan"
+let pretty fmt p =
+  Format.pp_print_string fmt "Sorry, I yanked the pretty-printer out while I was refactoring. Feel free to put it back - Ryan"
 
 module Make_parse (Conf: Parse_config) = struct
   let parse_file include_dirs p4_file verbose =
@@ -82,21 +82,29 @@ module Make_parse (Conf: Parse_config) = struct
     |> List.fold_left ~init:"" ~f:(^)
 
   let check_file (include_dirs : string list) (p4_file : string)
-      (print_json : bool) (pretty_json : bool) (verbose : bool) : unit =
+      (print_json : bool) (pretty_json : bool) (exportp4 : bool) (verbose : bool) : unit =
     match parse_file include_dirs p4_file verbose with
     | `Ok prog ->
       let prog, renamer = Elaborate.elab prog in
-      Checker.check_program renamer prog |> ignore;
-      if print_json then
-        let json = Types.program_to_yojson prog in
-        let to_string j =
-          if pretty_json then
-            Yojson.Safe.pretty_to_string j
-          else
-            Yojson.Safe.to_string j in
-        Format.printf "%s" (to_string json)
-      else
-        Format.printf "%a" pretty prog
+      let _, typed_prog = Checker.check_program renamer prog in
+      begin
+        if print_json then
+          let json = Types.program_to_yojson prog in
+          let to_string j =
+            if pretty_json then
+              Yojson.Safe.pretty_to_string j
+            else
+              Yojson.Safe.to_string j in
+          Format.printf "%s" (to_string json)
+        else
+          Format.printf "%a" pretty prog
+      end;
+      if exportp4 then
+        (* let oc = open_out ofile in *)
+        (* let oc = Stdlib.open_out "out.v" in *)
+        let oc = Out_channel.create "out.v" in
+        Exportp4.print_program (Format.formatter_of_out_channel oc) typed_prog;
+        Out_channel.close oc
     | `Error (info, Lexer.Error s) ->
       Format.eprintf "%s: %s@\n%!" (Info.to_string info) s
     | `Error (info, Parser.Error) ->
@@ -104,8 +112,9 @@ module Make_parse (Conf: Parse_config) = struct
     | `Error (info, err) ->
       Format.eprintf "%s: %s@\n%!" (Info.to_string info) (Exn.to_string err)
 
-  (* TODO restore evaluator
   let eval_file include_dirs p4_file verbose pkt_str ctrl_json port target =
+    failwith "eval_file removed"
+    (* TODO restore evaluator
     let port = Bigint.of_int port in
     let pkt = Cstruct.of_hex pkt_str in
     let open Yojson.Safe in
@@ -137,8 +146,11 @@ module Make_parse (Conf: Parse_config) = struct
         | _ -> Format.sprintf "Architecture %s unsupported" target |> failwith
       end
     | `Error (info, exn) as e-> e
+    *)
 
   let eval_file_string include_dirs p4_file verbose pkt_str ctrl_json port target =
+    failwith "eval_file_string removed"
+    (* TODO restore evaluator
     match eval_file include_dirs p4_file verbose pkt_str ctrl_json port target with
     | `Ok (pkt, port) ->
       (pkt |> Cstruct.to_string |> hex_of_string) ^ " port: " ^ Bigint.to_string port
@@ -147,5 +159,6 @@ module Make_parse (Conf: Parse_config) = struct
       let exn_msg = Exn.to_string exn in
       let info_string = Info.to_string info in
       info_string ^ "\n" ^ exn_msg
-                           *)
+    *)
+
 end

@@ -65,9 +65,10 @@ let check_command =
      +> flag "-I" (listed string) ~doc:"<dir> Add directory to include search path"
      +> flag "-json" no_arg ~doc:" Print parsed tree as JSON"
      +> flag "-pretty" no_arg ~doc:" Pretty-print JSON"
+     +> flag "-exportp4" no_arg ~doc:" Export P4 syntax in Coq"
      +> anon ("p4file" %: string))
-    (fun verbose include_dir json pretty p4file () ->
-       ignore (check_file include_dir p4file json pretty verbose))
+    (fun verbose include_dir json pretty exportp4 p4file () ->
+       ignore (check_file include_dir p4file json pretty exportp4 verbose))
 
 let eval_command =
   let open Command.Spec in
@@ -85,6 +86,8 @@ let eval_command =
        print_string (eval_file_string include_dir p4file verbose pkt_str (Yojson.Safe.from_file ctrl_json) (int_of_string port) target))
 
 let do_stf include_dir stf_file p4_file =
+  failwith "do_stf removed"
+  (* TODO restore stf
     let print_err (e_port, e_pkt) (a_port, a_pkt) =
         Printf.printf "Packet differed from the expected packet.\nExpected: port %s pkt %s\nActual:   port %s pkt %s\n\n"
                       e_port e_pkt a_port a_pkt
@@ -103,6 +106,7 @@ let do_stf include_dir stf_file p4_file =
     in
     let pkts = List.zip_exn expected results in
     List.iter ~f:check_pkt pkts
+  *)
 
 
 let stf_command =
