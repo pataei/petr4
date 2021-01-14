@@ -13,3 +13,6 @@ let eq x y =
 
 let neq x y =
   not (eq x y)
+
+let dummy s =
+  { tags = Info.dummy; str = s }

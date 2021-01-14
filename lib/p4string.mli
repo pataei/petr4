@@ -8,3 +8,4 @@ type t = Info.t pre_t
 
 val eq: 'a pre_t -> 'a pre_t -> bool
 val neq: 'a pre_t -> 'a pre_t -> bool
+val dummy: string -> t

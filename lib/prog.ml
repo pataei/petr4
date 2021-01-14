@@ -54,4 +54,4 @@ type signal =
   | SContinue
   | SReturn of coq_Value
   | SExit
-  | SReject of string
+  | SReject of P4string.t
