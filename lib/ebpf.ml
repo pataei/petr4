@@ -2,7 +2,6 @@ module I = Info
 open Target
 open Prog
 open Env
-open Value
 open Core_kernel
 open Typed
 module Info = I
@@ -11,6 +10,7 @@ let (<>) = Stdlib.(<>)
 
 module PreEbpfFilter : Target = struct
 
+  type t = loc
   type obj =
     | CounterArray of Bigint.t list
     | ArrayTable of unit (* TODO *)
@@ -26,7 +26,7 @@ module PreEbpfFilter : Target = struct
 
   let eval_counter_array : extern = fun env st ts args ->
     let loc, max_idx = match args with
-      | [(VRuntime {loc;_}, _); (VBit{v;_},_);_] -> loc,v
+      | [(ValObj (ValObjRuntime (loc, _)), _); (ValBase (ValBaseBit (v, _)),_);_] -> loc,v
       | _ -> failwith "unexpected counter array init args" in
     let init = Bigint.zero in
     let arr = List.init (max_idx |> Bigint.to_int_exn) ~f:(fun _ -> init) in

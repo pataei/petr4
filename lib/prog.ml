@@ -43,7 +43,7 @@ type pkt = {
   main: buf;
   in_size: int;
 }
-type loc = string
+type loc = P4string.t
 type entries = (Ast.qualified_name * (int option * Ast.match_ list * Ast.action * Ast.id option) list) list * (Ast.qualified_name * Ast.action list) list
 
 type vsets = coq_Match list list
