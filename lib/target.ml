@@ -253,12 +253,15 @@ and value_of_lmember (reader : 'a reader) (st : 'a State.t) (env : env) (lv : co
   | _ -> failwith "unreachable"
 
 and value_of_lbit (reader : 'a reader) (st : 'a State.t) (env : env) (lv : coq_ValueLvalue)
-    (hi : int) (lo : int) : signal * coq_ValueBase =
-  let (s,n) = value_of_lvalue reader env st lv in
+    (hi : int) (lo : int) : signal * coq_Value =
+  let (signal, n) = value_of_lvalue reader env st lv in
   let n' = n |> bigint_of_val in
   match s with 
-  | SContinue -> s, ValBaseBit (hi - lo + 1, Bigint.(bitstring_slice n' (of_int hi) (of_int lo)))
-  | SReject _ | SReturn _ | SExit -> s, ValBaseNull
+  | SContinue ->
+    let width = hi - lo + 1 in
+    let string = bitstring_slice n' (Bigint.of_int hi) (Bigint.of_int lo) in
+    s, ValBase (ValBaseBit (width, string))
+  | SReject _ | SReturn _ | SExit -> s, ValBase ValBaseNull
 
 and value_of_larray (reader : 'a reader) (st : 'a State.t) (env : env) (lv : coq_ValueLvalue)
     (idx : int) : signal * coq_ValueBase =
