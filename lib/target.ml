@@ -248,14 +248,14 @@ and value_of_lmember (reader : 'a reader) (st : 'a State.t) (env : env) (lv : co
     | ValBase (ValBaseStack (vs, s, i)) -> value_of_stack_mem_lvalue st n vs s i
     | _ -> failwith "no lcoq_Value member" in
   match s with
-  | SContinue -> (s,v')
-  | SReject _ -> (s,VNull)
+  | SContinue -> (s, ValBase v')
+  | SReject _ -> (s, ValBase ValBaseNull)
   | _ -> failwith "unreachable"
 
 and value_of_lbit (reader : 'a reader) (st : 'a State.t) (env : env) (lv : coq_ValueLvalue)
     (hi : int) (lo : int) : signal * coq_Value =
   let (signal, n) = value_of_lvalue reader env st lv in
-  let n' = n |> bigint_of_val in
+  let n' = n |> Checker.bigint_of_value in
   match s with 
   | SContinue ->
     let width = hi - lo + 1 in
@@ -264,16 +264,20 @@ and value_of_lbit (reader : 'a reader) (st : 'a State.t) (env : env) (lv : coq_V
   | SReject _ | SReturn _ | SExit -> s, ValBase ValBaseNull
 
 and value_of_larray (reader : 'a reader) (st : 'a State.t) (env : env) (lv : coq_ValueLvalue)
-    (idx : int) : signal * coq_ValueBase =
+    (idx : int) : signal * coq_Value =
   let (s,v) = value_of_lvalue reader env st lv in
   match s with
   | SContinue ->
     begin match v with
-      | VStack{headers=vs;size=s;next=i} ->
-        begin try (SContinue, List.nth_exn vs Bigint.(to_int_exn (idx % s)))
-          with Invalid_argument _ -> (SReject "StackOutOfBounds", VNull) end
+      | ValBase (ValBaseStack (vs, s, i)) ->
+        begin
+          try (SContinue, ValBase (List.nth_exn vs (idx % s)))
+          with Invalid_argument _ ->
+            (SReject (P4string.dummy "StackOutOfBounds"),
+             ValBase ValBaseNull)
+        end
       | _ -> failwith "array access is not a header stack" end
-  | SReject _ -> (s,VNull)
+  | SReject _ -> (s, ValBase ValBaseNull)
   | _ -> failwith "unreachable"
 
 and value_of_stack_mem_lvalue (st : 'a State.t) (name : P4string.t) (ls : coq_ValueBase list)
@@ -341,7 +345,7 @@ and update_union_member (fields : (P4string.t * coq_ValueBase) list)
     (member_name : P4string.t) (new_value : coq_ValueBase) : coq_ValueBase * signal =
   let new_fields, new_value_valid = assert_header new_value in
   let set_validity value validity =
-    let value_fields, _ = assert_header coq_Value in
+    let value_fields, _ = Poulet4.Unpack.unpack_header value in
     ValBaseHeader (value_fields, validity)
   in
   let update_field (name, value) =
