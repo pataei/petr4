@@ -3,7 +3,6 @@ Require Import Coq.Numbers.BinNums.
 Require Import Monads.Monad.
 Require Import Monads.State.
 
-Require String.
 Require Import Syntax.
 Require Import Environment.
 
