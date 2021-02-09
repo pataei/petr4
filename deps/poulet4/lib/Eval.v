@@ -7,7 +7,7 @@ Require Import Monads.Monad.
 Require Import Monads.Option.
 Require Import Monads.State.
 
-Require Petr4.String.
+Require Petr4.Str.
 Require Petr4.StringConstants.
 Require Import Petr4.Environment.
 Require Import Petr4.Syntax.
@@ -139,7 +139,7 @@ Section Eval.
 
   Set Printing Implicit.
 
-  Definition eval_kv (kv: KeyValue) : env_monad (String.t * Value) :=
+  Definition eval_kv (kv: KeyValue) : env_monad (Str.t * Value) :=
     let '(MkKeyValue _ key expr) := kv in
     let* value := eval_expression expr in
     mret (key.(P4String.str), value).
@@ -188,16 +188,16 @@ Section Eval.
       mret (None :: vals)
     end.
 
-  Definition is_packet_func (str: String.t) : bool := 
+  Definition is_packet_func (str: Str.t) : bool := 
     if String.eqb str StringConstants.extract
     then true
     else false.
 
-  Definition eval_packet_func (obj: ValueLvalue) (name: String.t) (type_args: list P4Type) (args: list (option Expression)) : env_monad unit :=
+  Definition eval_packet_func (obj: ValueLvalue) (name: Str.t) (type_args: list P4Type) (args: list (option Expression)) : env_monad unit :=
     obj' <- env_lookup _ tags_dummy obj ;;
     match obj' with
     | ValObj (ValObjPacket bits) => 
-      if String.eqb name String.extract 
+      if String.eqb name Str.extract 
       then 
         match (args, type_args) with
         | ((Some target_expr) :: _, into :: _) =>
@@ -221,21 +221,21 @@ Section Eval.
   Definition eval_builtin_func (name: P4String) (obj: ValueLvalue) (type_args : list P4Type) (args: list (option Expression)) : env_monad Value :=
     let name := P4String.str name in
     let* args' := eval_arguments args in
-    if String.eqb name String.isValid
+    if Str.eqb name Str.isValid
     then eval_is_valid obj
-    else if String.eqb name String.setValid
+    else if Str.eqb name Str.setValid
     then dummy_value _ (eval_set_bool obj true)
-    else if String.eqb name String.setInvalid
+    else if Str.eqb name Str.setInvalid
     then dummy_value _ (eval_set_bool obj false)
-    else if String.eqb name String.pop_front
+    else if Str.eqb name Str.pop_front
     then dummy_value _ (eval_pop_front obj args')
-    else if String.eqb name String.push_front
+    else if Str.eqb name Str.push_front
     then dummy_value _ (eval_push_front obj args')
     else if is_packet_func name 
     then dummy_value _ (eval_packet_func obj name type_args args)
     else state_fail Internal.
 
-  Definition eval_extern_func (name: String.t) (obj: ValueLvalue) (type_args: list P4Type) (args: list (option Expression)): env_monad Value.
+  Definition eval_extern_func (name: Str.t) (obj: ValueLvalue) (type_args: list P4Type) (args: list (option Expression)): env_monad Value.
   Admitted.
   (* TODO fix
   let* Packet bits := unpack_extern_obj (find_lvalue obj) in

@@ -12,14 +12,14 @@ Require Import Syntax.
 Open Scope monad.
 
 Module Import MNat := FMapList.Make(Nat_as_OT).
-Module Import MStr := FMapList.Make(String.StringOT).
+Module Import MStr := FMapList.Make(Str.StringOT).
 
 Inductive exception :=
 | PacketTooShort
 | Reject
 | Exit
 | Internal
-| AssertError (error_msg: String.t).
+| AssertError (error_msg: Str.t).
 
 Section Environment.
 
@@ -46,7 +46,7 @@ Section Environment.
       | None => (inr Internal, env)
       end.
 
-  Fixpoint stack_lookup' (key: String.t) (st: stack) : option loc :=
+  Fixpoint stack_lookup' (key: Str.t) (st: stack) : option loc :=
     match st with
     | nil => None
     | top :: rest =>
@@ -56,14 +56,14 @@ Section Environment.
       end
     end.
 
-  Definition stack_lookup (key: String.t) : env_monad loc :=
+  Definition stack_lookup (key: Str.t) : env_monad loc :=
     fun env =>
       match stack_lookup' key (env_stack env) with
       | None => state_fail Internal env
       | Some l => mret l env
       end.
 
-  Definition stack_insert' (key: String.t) (l: loc) (st: stack) : option stack :=
+  Definition stack_insert' (key: Str.t) (l: loc) (st: stack) : option stack :=
     match st with
     | nil => None
     | top :: rest =>
@@ -73,7 +73,7 @@ Section Environment.
       end
     end.
 
-  Definition stack_insert (key: String.t) (l: loc) : env_monad unit :=
+  Definition stack_insert (key: Str.t) (l: loc) : env_monad unit :=
     fun env =>
       match stack_insert' key l (env_stack env) with
       | None => state_fail Internal env
@@ -103,7 +103,7 @@ Section Environment.
       end.
 
   (* TODO handle name resolution properly *)
-  Definition str_of_name_warning_not_safe (t: @Typed.name tags_t) : String.t :=
+  Definition str_of_name_warning_not_safe (t: @Typed.name tags_t) : Str.t :=
     match t with 
     | Typed.BareName s
     | Typed.QualifiedName _ s => s.(P4String.str)
@@ -132,7 +132,7 @@ Section Environment.
         env_heap := MNat.add l v (env_heap env);
       |}.
 
-  Definition env_insert (name: String.t) (v: @Value tags_t) : env_monad unit :=
+  Definition env_insert (name: Str.t) (v: @Value tags_t) : env_monad unit :=
     let* l := heap_insert v in
     stack_insert name l.
 

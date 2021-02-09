@@ -37,7 +37,7 @@ Section Unpack.
     | _ => state_fail Internal
     end.
 
-  Definition unpack_string (wrapped: env_monad Value) : env_monad String.t :=
+  Definition unpack_string (wrapped: env_monad Value) : env_monad Str.t :=
     let* unwrapped := wrapped in
     match unwrapped with
     | ValBase (ValBaseString s) => mret s.(P4String.str)

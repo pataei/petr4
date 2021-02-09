@@ -1,4 +1,4 @@
-Require Import Strings.String.
+Require Import Coq.Strings.String.
 Require Import OrderedType.
 Open Scope string_scope.
 
@@ -62,7 +62,7 @@ Inductive lt: t -> t -> Prop :=
     lt s s' ->
     lt (String c s) (String c s').
 
-Definition eqb: String.t -> String.t -> bool :=
+Definition eqb: t -> t -> bool :=
   String.eqb.
 
 Theorem eqb_correct:

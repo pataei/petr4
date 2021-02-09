@@ -3,7 +3,7 @@ Require Import Coq.Numbers.BinNums.
 
 Require Import Petr4.Info.
 Require Import Petr4.Typed.
-Require Petr4.String.
+Require Petr4.Str.
 Require Petr4.P4String.
 Require Petr4.P4Int.
 
