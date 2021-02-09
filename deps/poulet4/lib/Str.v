@@ -118,7 +118,7 @@ Proof.
 Defined.
 
 Definition eq_dec (x y: t) : {eq x y} + {~ eq x y} :=
-  Bool.reflect_dec _ _ (String.eqb_spec x y).
+  String.string_dec x y.
 
 Module StringOT <: OrderedType.OrderedType.
   Definition t := t.
