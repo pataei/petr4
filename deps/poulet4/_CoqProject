@@ -20,4 +20,5 @@ lib/Platform/Packet.v
 -R extraction Petr4
 
 extraction/Extract.v
+extraction/ExtractString.v
 extraction/ExtractOcamlBinNumsBigint.v
