@@ -238,64 +238,64 @@ type 'a pre_program =
   [%import:'a Poulet4.Syntax.program
     [@with coq_Declaration := pre_Declaration]]
   [@@deriving sexp,show,yojson]
-type coq_MatchPreT = (Info.t * Annotation.t list) pre_MatchPreT
+type coq_MatchPreT = (Info.t * Types.Annotation.t list) pre_MatchPreT
   [@@deriving sexp,show,yojson]
-type coq_Match = (Info.t * Annotation.t list) pre_Match
+type coq_Match = (Info.t * Types.Annotation.t list) pre_Match
   [@@deriving sexp,show,yojson]
-type coq_TablePreActionRef = (Info.t * Annotation.t list) pre_TablePreActionRef
+type coq_TablePreActionRef = (Info.t * Types.Annotation.t list) pre_TablePreActionRef
   [@@deriving sexp,show,yojson]
-type coq_TableActionRef = (Info.t * Annotation.t list) pre_TableActionRef
+type coq_TableActionRef = (Info.t * Types.Annotation.t list) pre_TableActionRef
   [@@deriving sexp,show,yojson]
-type coq_TableKey = (Info.t * Annotation.t list) pre_TableKey
+type coq_TableKey = (Info.t * Types.Annotation.t list) pre_TableKey
   [@@deriving sexp,show,yojson]
-type coq_TableEntry = (Info.t * Annotation.t list) pre_TableEntry
+type coq_TableEntry = (Info.t * Types.Annotation.t list) pre_TableEntry
   [@@deriving sexp,show,yojson]
-type coq_TableProperty = (Info.t * Annotation.t list) pre_TableProperty
+type coq_TableProperty = (Info.t * Types.Annotation.t list) pre_TableProperty
   [@@deriving sexp,show,yojson]
 
-type coq_ValueBase = (Info.t * Annotation.t list) pre_ValueBase
+type coq_ValueBase = (Info.t * Types.Annotation.t list) pre_ValueBase
   [@@deriving sexp,show,yojson]
-type coq_ValueSet = (Info.t * Annotation.t list) pre_ValueSet
+type coq_ValueSet = (Info.t * Types.Annotation.t list) pre_ValueSet
   [@@deriving sexp,show,yojson]
-type coq_StatementSwitchLabel = (Info.t * Annotation.t list) pre_StatementSwitchLabel
+type coq_StatementSwitchLabel = (Info.t * Types.Annotation.t list) pre_StatementSwitchLabel
   [@@deriving sexp,show,yojson]
-type coq_StatementSwitchCase = (Info.t * Annotation.t list) pre_StatementSwitchCase
+type coq_StatementSwitchCase = (Info.t * Types.Annotation.t list) pre_StatementSwitchCase
   [@@deriving sexp,show,yojson]
-type coq_StatementPreT = (Info.t * Annotation.t list) pre_StatementPreT
+type coq_StatementPreT = (Info.t * Types.Annotation.t list) pre_StatementPreT
   [@@deriving sexp,show,yojson]
-type coq_Statement = (Info.t * Annotation.t list) pre_Statement
+type coq_Statement = (Info.t * Types.Annotation.t list) pre_Statement
   [@@deriving sexp,show,yojson]
-type coq_Block = (Info.t * Annotation.t list) pre_Block
+type coq_Block = (Info.t * Types.Annotation.t list) pre_Block
   [@@deriving sexp,show,yojson]
-type coq_ParserCase = (Info.t * Annotation.t list) pre_ParserCase
+type coq_ParserCase = (Info.t * Types.Annotation.t list) pre_ParserCase
   [@@deriving sexp,show,yojson]
-type coq_ParserTransition = (Info.t * Annotation.t list) pre_ParserTransition
+type coq_ParserTransition = (Info.t * Types.Annotation.t list) pre_ParserTransition
   [@@deriving sexp,show,yojson]
-type coq_ParserState = (Info.t * Annotation.t list) pre_ParserState
+type coq_ParserState = (Info.t * Types.Annotation.t list) pre_ParserState
   [@@deriving sexp,show,yojson]
-type coq_DeclarationField = (Info.t * Annotation.t list) pre_DeclarationField
+type coq_DeclarationField = (Info.t * Types.Annotation.t list) pre_DeclarationField
   [@@deriving sexp,show,yojson]
-type coq_Declaration = (Info.t * Annotation.t list) pre_Declaration
+type coq_Declaration = (Info.t * Types.Annotation.t list) pre_Declaration
   [@@deriving sexp,show,yojson]
-type coq_ValueTable = (Info.t * Annotation.t list) pre_ValueTable
+type coq_ValueTable = (Info.t * Types.Annotation.t list) pre_ValueTable
   [@@deriving sexp,show,yojson]
-type coq_Env_EvalEnv = (Info.t * Annotation.t list) pre_Env_EvalEnv
+type coq_Env_EvalEnv = (Info.t * Types.Annotation.t list) pre_Env_EvalEnv
   [@@deriving sexp,show,yojson]
-type coq_ExternMethod = (Info.t * Annotation.t list) pre_ExternMethod
+type coq_ExternMethod = (Info.t * Types.Annotation.t list) pre_ExternMethod
   [@@deriving sexp,show,yojson]
-type coq_ExternMethods = (Info.t * Annotation.t list) pre_ExternMethods
+type coq_ExternMethods = (Info.t * Types.Annotation.t list) pre_ExternMethods
   [@@deriving sexp,show,yojson]
-type coq_ValuePreLvalue = (Info.t * Annotation.t list) pre_ValuePreLvalue
+type coq_ValuePreLvalue = (Info.t * Types.Annotation.t list) pre_ValuePreLvalue
   [@@deriving sexp,show,yojson]
-type coq_ValueLvalue = (Info.t * Annotation.t list) pre_ValueLvalue
+type coq_ValueLvalue = (Info.t * Types.Annotation.t list) pre_ValueLvalue
   [@@deriving sexp,show,yojson]
-type coq_ValueObject = (Info.t * Annotation.t list) pre_ValueObject
+type coq_ValueObject = (Info.t * Types.Annotation.t list) pre_ValueObject
   [@@deriving sexp,show,yojson]
-type coq_ValueConstructor = (Info.t * Annotation.t list) pre_ValueConstructor
+type coq_ValueConstructor = (Info.t * Types.Annotation.t list) pre_ValueConstructor
   [@@deriving sexp,show,yojson]
-type coq_Value = (Info.t * Annotation.t list) pre_Value
+type coq_Value = (Info.t * Types.Annotation.t list) pre_Value
   [@@deriving sexp,show,yojson]
-type program = (Info.t * Annotation.t list) pre_program
+type program = (Info.t * Types.Annotation.t list) pre_program
   [@@deriving sexp,show,yojson]
 
 (* Everything below this comment is runtime data structures and not
