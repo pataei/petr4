@@ -81,8 +81,9 @@ module Make_parse (Conf: Parse_config) = struct
     |> List.map ~f:hex_of_char
     |> List.fold_left ~init:"" ~f:(^)
 
-  let check_file (include_dirs : string list) (p4_file : string)
-      (print_json : bool) (pretty_json : bool) (exportp4 : bool) (verbose : bool) : unit =
+  let check_file (include_dirs : string list) (p4_file : string) 
+      (print_json : bool) (pretty_json : bool) (exportp4 : bool) (normalize : bool)
+      (export_file : string) (typed_json : bool) (verbose : bool) : unit =
     match parse_file include_dirs p4_file verbose with
     | `Ok prog ->
       let prog, renamer = Elaborate.elab prog in
@@ -99,12 +100,23 @@ module Make_parse (Conf: Parse_config) = struct
         else
           Format.printf "%a" pretty prog
       end;
-      if exportp4 then
-        (* let oc = open_out ofile in *)
-        (* let oc = Stdlib.open_out "out.v" in *)
-        let oc = Out_channel.create "out.v" in
-        Exportp4.print_program (Format.formatter_of_out_channel oc) typed_prog;
+      begin
+        if typed_json then
+          let json = Prog.program_to_yojson typed_prog in
+          Format.printf "%s@\n%!" (Yojson.Safe.pretty_to_string json)
+      end;
+      begin
+        if exportp4 then
+          (* let oc = open_out ofile in *)
+          (* let oc = Stdlib.open_out "out.v" in *)
+          let oc = Out_channel.create export_file in
+          let prog' =
+            if normalize then
+              Poulet4.SimplExpr.transform_prog Info.dummy typed_prog
+            else typed_prog in
+          Exportp4.print_program (Format.formatter_of_out_channel oc) prog';
         Out_channel.close oc
+      end
     | `Error (info, Lexer.Error s) ->
       Format.eprintf "%s: %s@\n%!" (Info.to_string info) s
     | `Error (info, Parser.Error) ->

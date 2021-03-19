@@ -38,10 +38,10 @@ let print_list f p l =
 
 (* print_info prints a unit now, because we do not have info in Coq in this version. *)
 let print_info p info =
-  fprintf p "tt"
+  fprintf p "NoInfo"
 
 let p4string p (s : P4string.t) =
-  fprintf p "{| @[<hov 0>tags := %a;@ str := \"%s\" |}@]" print_info s.tags s.str
+  fprintf p "{| @[<hov 0>stags := %a;@ str := \"%s\" |}@]" print_info s.tags s.str
 
 let p4strings =
   print_list p4string
@@ -53,7 +53,7 @@ let print_bigint p n =
   fprintf p "%s" (Bignum.to_string_accurate (Bignum.of_bigint n))
 
 let p4int p (n : P4int.t) =
-  fprintf p "{| @[<hov 0>tags := %a;@ value := %a;@ width_signed := %a |}@]" 
+  fprintf p "{| @[<hov 0>itags := %a;@ value := %a;@ width_signed := %a |}@]" 
       print_info n.tags 
       print_bigint n.value
       (print_option (print_pair print_nat print_bool)) n.width_signed
@@ -372,7 +372,7 @@ and print_pre_expr p (pre_expr : coq_ExpressionPreT) =
 and print_keyvalue p kv =
   match kv with
   | MkKeyValue (info, key, value) ->
-      fprintf p "(@[<hov 4>MkKeyValue@ %a@ %a %a@)@]"
+      fprintf p "(@[<hov 4>MkKeyValue@ %a@ %a@ %a)@]"
           print_info info
           p4string key
           print_expr value
@@ -391,7 +391,7 @@ let print_pre_match p (m: coq_MatchPreT) =
 let print_match p (m: coq_Match) =
   match m with
   | MkMatch (info, expr, typ) ->
-      fprintf p "(@[<hov 4>MkMatch@ %a@ %a %a@)@]"
+      fprintf p "(@[<hov 4>MkMatch@ %a@ %a@ %a)@]"
           print_info info
           print_pre_match expr
           print_type typ
@@ -402,38 +402,47 @@ let print_matches =
 let print_table_pre_action_ref p (action: coq_TablePreActionRef) =
   match action with
   | MkTablePreActionRef (name, args) ->
-      fprintf p "(@[<hov 4>MkTablePreActionRef@ %a %a@)@]"
+      fprintf p "(@[<hov 4>MkTablePreActionRef@ %a@ %a)@]"
           print_name name
           (print_list (print_option print_expr)) args
   
 let print_table_action_ref p (action: coq_TableActionRef) =
   match action with
   | MkTableActionRef (info, action, typ) ->
-      fprintf p "(@[<hov 4>MkTableActionRef@ %a@ %a %a@)@]"
+      fprintf p "(@[<hov 4>MkTableActionRef@ %a@ %a@ %a)@]"
           print_info info
           print_table_pre_action_ref action
           print_type typ
   
+let print_table_actions =
+  print_list print_table_action_ref
+
 let print_table_key p (key: coq_TableKey) =
   match key with
   | MkTableKey (info, key, match_kind) ->
-      fprintf p "(@[<hov 4>MkTableKey@ %a@ %a %a@)@]"
+      fprintf p "(@[<hov 4>MkTableKey@ %a@ %a@ %a)@]"
           print_info info
           print_expr key
           p4string match_kind
 
+let print_table_keys =
+  print_list print_table_key
+
 let print_table_entry p (entry: coq_TableEntry) =
   match entry with
   | MkTableEntry (info, matches, action) ->
-      fprintf p "(@[<hov 4>MkTableEntry@ %a@ %a %a@)@]"
+      fprintf p "(@[<hov 4>MkTableEntry@ %a@ %a@ %a)@]"
           print_info info
           print_matches matches
           print_table_action_ref action
-  
+
+let print_table_entries = 
+  print_list print_table_entry
+
 let print_table_property p (property: coq_TableProperty) =
   match property with
   | MkTableProperty (info, const, s, expr) ->
-      fprintf p "(@[<hov 4>MkTableEntry@ %a@ %a@ %a %a@)@]"
+      fprintf p "(@[<hov 4>MkTableEntry@ %a@ %a@ %a@ %a)@]"
           print_info info
           print_bool const
           p4string s
@@ -661,6 +670,12 @@ let print_parser_state p (state: coq_ParserState) =
 let print_parser_states =
   print_list print_parser_state
 
+let print_sum_type_left f p l= 
+  fprintf p "(@[<hov 0>inl %a)@]" f l
+
+let print_sum_type_right f p r = 
+  fprintf p "(@[<hov 0>inr %a)@]" f r
+
 let print_decl_field p (decl_field : coq_DeclarationField) =
   match decl_field with
   | MkDeclarationField (info, typ, name) ->
@@ -669,99 +684,493 @@ let print_decl_field p (decl_field : coq_DeclarationField) =
           print_type typ
           p4string name
 
-let print_decl p (decl : coq_Declaration) =
+let gen_format_string decl_name content = 
+  match decl_name with
+  | Some decl_name ->
+      ("@[<hov 4>Definition %s := " ^^ content ^^ ".@]@ @ ", decl_name)
+  | None -> 
+      ("(@[<hov 4>%s" ^^ content ^^ ")@]", "")
+
+let rec print_decl (decl_name : string option) p (decl : coq_Declaration) =
+  (* let print_dummy_decl decl_name p =
+    fprintf p "Axiom %s : @Declaration unit.@ @ " decl_name
+  in  *)
   match decl with
-  | DeclAction (info, name, data_params, ctrl_params, body) ->
-      fprintf p "(DeclAction@ %a@ %a@ %a@ %a@ %a)"
+  | DeclConstant (info, typ, name, value) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclConstant@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
           print_info info
+          print_type typ
           p4string name
-          print_params data_params
-          print_params ctrl_params
-          print_block body
-  | _ -> ()
-  (* failwith "unimplemented" *)
-
-let print_decls =
-  print_list print_decl
-
-let get_decl_name =
-  let cnt = ref 0 in
-  fun () ->
-    cnt := !cnt + 1;
-    "decl" ^ string_of_int !cnt
-
-let print_global_decl p (decl : coq_Declaration) : string =
-  let print_dummy_decl p () =
-    let decl_name = get_decl_name () in
-    fprintf p "Axiom %s : @Declaration unit.@ @ " decl_name;
-    decl_name
-  in
-  match decl with
+          print_value_base value
   | DeclInstantiation (info, typ, args, name, init) ->
-      let decl_name = name.str in
-      fprintf p "@[<hov 4>Definition %s := DeclInstantiation@ %a@ %a@ %a@ %a@ %a.@]@ @ "
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclInstantiation@ %a@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
           decl_name
           print_info info
           print_type typ
           print_exprs args
           p4string name
-          (print_option print_block) init;
-      decl_name
+          (print_option print_block) init
   | DeclParser (info, name, type_params, params, constructor_params, locals, states) ->
-      let decl_name = name.str in
-      fprintf p "@[<hov 4>Definition %s := DeclParser@ %a@ %a@ %a@ %a@ %a@ %a@ %a.@]@ @ "
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclParser@ %a@ %a@ %a@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
           decl_name
           print_info info
           p4string name
           p4strings type_params
           print_params params
           print_params constructor_params
-          print_decls locals
-          print_parser_states states;
-      decl_name
+          (print_list (print_decl None)) locals
+          print_parser_states states
   | DeclControl (info, name, type_params, params, constructor_params, locals, apply) ->
-      let decl_name = name.str in
-      fprintf p "@[<hov 4>Definition %s := DeclControl@ %a@ %a@ %a@ %a@ %a@ %a@ %a.@]@ @ "
+      let (f_str, decl_name) =  
+        (gen_format_string decl_name "DeclControl@ %a@ %a@ %a@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
           decl_name
           print_info info
           p4string name
           p4strings type_params
           print_params params
           print_params constructor_params
-          print_decls locals
-          print_block apply;
-      decl_name
-  | DeclStruct (info, name, fields) ->
-      let decl_name = name.str in
-      fprintf p "@[<hov 4>Definition %s := DeclStruct@ %a@ %a@ %a.@]@ @ "
+          (print_list (print_decl None)) locals
+          print_block apply
+  | DeclFunction (info, ret_type, name, type_params, params, body) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclFunction@ %a@ %a@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+          print_type ret_type
+          p4string name
+          p4strings type_params
+          print_params params
+          print_block body
+  | DeclExternFunction (info, ret_type, name, type_params, params) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclExternFunction@ %a@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+          print_type ret_type
+          p4string name
+          p4strings type_params
+          print_params params
+  | DeclVariable (info, typ, name, init) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclVariable@ %a@ %a@ %a@ %a")
+      in fprintf p f_str
+          decl_name
+          print_info info
+          print_type typ
+          p4string name
+          (print_option print_expr) init
+  | DeclValueSet (info, typ, size, name) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclValueSet@ %a@ %a@ %a@ %a")
+      in fprintf p f_str
+          decl_name
+          print_info info
+          print_type typ
+          print_expr size
+          p4string name
+  | DeclAction (info, name, data_params, ctrl_params, body) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclAction@ %a@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
           decl_name
           print_info info
           p4string name
-          (print_list print_decl_field) fields;
-      decl_name
-  | DeclError (info, decls) ->
-      let decl_name = get_decl_name () in
-      fprintf p "@[<hov 4>Definition %s := DeclError@ %a@ %a.@]@ @ "
+          print_params data_params
+          print_params ctrl_params
+          print_block body
+  | DeclTable (info, name, keys, actions, entries, 
+              default_action, size, custom_properties) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclTable@ %a@ %a@ %a@ %a@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
           decl_name
           print_info info
-          p4strings decls;
-      decl_name
-  | _ -> print_dummy_decl p ()
+          p4string name
+          print_table_keys keys
+          print_table_actions actions
+          (print_option print_table_entries) entries
+          (print_option print_table_action_ref) default_action
+          (print_option p4int) size
+          (print_list print_table_property) custom_properties
+  | DeclHeader (info, name, fields) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclHeader@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+          p4string name
+          (print_list print_decl_field) fields
+  | DeclHeaderUnion (info, name, fields) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclHeaderUnion@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+          p4string name
+          (print_list print_decl_field) fields
+  | DeclStruct (info, name, fields) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclStruct@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+          p4string name
+          (print_list print_decl_field) fields
+  | DeclError (info, members) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclError@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+          p4strings members
+  | DeclMatchKind (info, members) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclMatchKind@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+          p4strings members
+  | DeclEnum (info, name, members) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclEnum@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+          p4string name
+          p4strings members
+  | DeclSerializableEnum (info, typ, name, members) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclSerializableEnum@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+          print_type typ
+          p4string name
+          (print_list (print_pair p4string print_expr)) members
+  | DeclExternObject (info, name, type_params, methods) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclExternObject@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+          p4string name
+          p4strings type_params
+          (print_list print_method_prototype) methods
+  | DeclTypeDef (info, name, typ_or_decl) ->
+    begin
+      match typ_or_decl with
+      | Coq_inl typ ->
+        let (f_str, decl_name) = 
+          (gen_format_string decl_name "DeclTypeDef@ %a@ %a@ %a")
+        in
+        fprintf p f_str
+            decl_name
+            print_info info
+            p4string name
+            (print_sum_type_left print_type) typ
+      | Coq_inr decl ->
+        let (f_str, decl_name) = 
+          (gen_format_string decl_name "DeclTypeDef@ %a@ %a@ %a")
+        in
+        fprintf p f_str
+            decl_name
+            print_info info
+            p4string name
+            (print_sum_type_right (print_decl None)) decl
+    end
+  | DeclNewType (info, name, typ_or_decl) ->
+    begin
+      match typ_or_decl with
+      | Coq_inl typ ->
+        let (f_str, decl_name) = 
+          (gen_format_string decl_name "DeclNewType@ %a@ %a@ %a")
+        in
+        fprintf p f_str
+            decl_name
+            print_info info
+            p4string name
+            (print_sum_type_left print_type) typ
+      | Coq_inr decl ->
+        let (f_str, decl_name) = 
+          (gen_format_string decl_name "DeclNewType@ %a@ %a@ %a")
+        in
+        fprintf p f_str
+            decl_name
+            print_info info
+            p4string name
+            (print_sum_type_right (print_decl None)) decl
+    end
+  | DeclControlType (info, name, type_params, params) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclControlType@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+            p4string name
+            p4strings type_params
+            print_params params
+  | DeclParserType (info, name, type_params, params) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclParserType@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+            p4string name
+            p4strings type_params
+            print_params params
+  | DeclPackageType (info, name, type_params, params) ->
+      let (f_str, decl_name) = 
+        (gen_format_string decl_name "DeclPackageType@ %a@ %a@ %a@ %a")
+      in
+      fprintf p f_str
+          decl_name
+          print_info info
+            p4string name
+            p4strings type_params
+            print_params params
+
+let print_decls =
+  print_list (print_decl None)
+
+let gen_decl_name =
+  let cnt = ref 0 in
+  fun (existing: string list) ->
+    cnt := !cnt + 1;
+    while List.mem ("decl" ^ string_of_int !cnt) existing do
+      cnt := !cnt + 1;
+    done;
+    "decl'" ^ string_of_int !cnt
+
+let get_decl_name (decl: coq_Declaration): string option =
+  match decl with
+    | DeclFunction (_, _, name, _, params, _)
+    | DeclExternFunction (_, _, name, _, params) -> 
+      let param_names = 
+        List.fold_left 
+        (fun accum p -> let MkParameter (_,_,_,_,name) = p 
+                        in accum ^ "'" ^ name.str) "" params
+      in Some (name.str ^ param_names)
+    | DeclConstant (_, _, name, _)
+    | DeclInstantiation (_, _, _, name, _)
+    | DeclParser (_, name, _, _, _, _, _)
+    | DeclControl (_, name, _, _, _, _, _)
+    | DeclVariable (_, _, name, _)
+    | DeclValueSet (_, _, _, name)
+    | DeclAction (_, name, _, _, _)
+    | DeclTable (_, name, _, _, _, _, _, _)
+    | DeclHeader (_, name, _)
+    | DeclHeaderUnion (_, name, _)
+    | DeclStruct (_, name, _)
+    | DeclEnum (_, name, _)
+    | DeclSerializableEnum (_, _, name, _)
+    | DeclExternObject (_, name, _, _)
+    | DeclTypeDef (_, name, _)
+    | DeclNewType (_, name, _)
+    | DeclControlType (_, name, _, _)
+    | DeclParserType (_, name, _, _)
+    | DeclPackageType (_, name, _, _) -> Some name.str
+    | DeclError (_, _)
+    | DeclMatchKind (_, _) -> None
+
+let collect_decl_names (program : Prog.program): string list =
+  List.filter_map Fun.id (List.map get_decl_name program)
+
+let print_top_decl p (existing: string list) (decl : coq_Declaration): string =
+  let decl_name = 
+    match get_decl_name decl with
+    | Some name -> name
+    | None -> gen_decl_name existing
+  in 
+    print_decl (Some decl_name) p decl;
+    decl_name
+
+let print_value_loc =
+  p4string
+
+let print_value_table p (value_table: coq_ValueTable) =
+  match value_table with
+  | MkValTable (name, keys, actions, default_action, const_entries) ->
+      fprintf p "(@[<hov 4>MkValTable@ %a@ %a@ %a@ %a@ %a)@]"
+          p4string name
+          print_table_keys keys
+          print_table_actions actions
+          print_table_action_ref default_action
+          print_table_entries const_entries
+
+let print_env_env print_binding =
+  print_list (print_list (print_pair p4string print_binding))
+
+let print_env_eval_env p (env: coq_Env_EvalEnv) =
+  match env with
+  | MkEnv_EvalEnv (vs, typ, namespaces) ->
+      fprintf p "(@[<hov 4>MkEnv_EvalEnv@ %a@ %a@ %a)@]"
+          (print_env_env p4string) vs
+          (print_env_env print_type) typ
+          p4string namespaces
+  
+let rec print_value_pre_lvalue p (lvalue : coq_ValuePreLvalue) = 
+  match lvalue with
+  | ValLeftName (name) ->
+      fprintf p "(@[<hov 0>ValLeftName@ %a)@]"
+          print_name name
+  | ValLeftMember (expr, name) ->
+      fprintf p "(@[<hov 4>ValLeftMember@ %a@ %a)@]"
+          print_lvalue expr
+          p4string name
+  | ValLeftBitAccess (expr, msb, lsb) ->
+      fprintf p "(@[<hov 4>ValLeftBitAccess@ %a@ %a@ %a)@]"
+          print_lvalue expr
+          print_nat msb
+          print_nat lsb
+  | ValLeftArrayAccess (expr, idx) ->
+      fprintf p "(@[<hov 4>ValLeftArrayAccess@ %a@ %a)@]"
+          print_lvalue expr
+          print_nat idx
+and print_lvalue p (lvalue: coq_ValueLvalue) =
+  match lvalue with
+  | MkValueLvalue  (lvalue, typ) ->
+      fprintf p "(@[<hov 4>MkValueLvalue@ %a@ %a)@]"
+          print_value_pre_lvalue lvalue
+          print_type typ
+  
+let print_value_fun_imp p (val_fun_impl: coq_ValueFunctionImplementation) =
+  match val_fun_impl with
+  | ValFuncImplUser (scope, body) ->
+      fprintf p "(@[<hov 4>ValFuncImplUser@ %a@ %a)@]"
+          print_env_eval_env scope
+          print_block body
+  | ValFuncImplExtern (name, caller) ->
+      fprintf p "(@[<hov 4>ValFuncImplExtern@ %a@ %a)@]"
+          p4string name
+          (print_option (print_pair print_value_loc p4string)) caller
+  | ValFuncImplBuiltin (name, caller) ->
+      fprintf p "(@[<hov 4>ValFuncImplExtern@ %a@ %a)@]"
+          p4string name
+          print_lvalue caller
+
+let print_value_object p (value: coq_ValueObject) =
+  match value with
+  | ValObjParser (scope, constructor_params, params, locals, states) ->
+      fprintf p "(@[<hov 4>ValObjParser@ %a@ %a@ %a@ %a@ %a)@]"
+          print_env_eval_env scope
+          print_params constructor_params
+          print_params params
+          print_decls locals
+          print_parser_states states
+  | ValObjTable (value_table) ->
+      fprintf p "(@[<hov 0>ValObjTable@ %a)@]"
+          print_value_table value_table
+  | ValObjControl (scope, constructor_params, params, locals, apply) ->
+      fprintf p "(@[<hov 4>ValObjControl@ %a@ %a@ %a@ %a@ %a)@]"
+          print_env_eval_env scope
+          print_params constructor_params
+          print_params params
+          print_decls locals
+          print_block apply
+  | ValObjPackage args ->
+      fprintf p "(@[<hov 0>ValObjPackage@ %a)@]"
+          (print_list (print_pair p4string print_value_loc)) args
+  | ValObjRuntime (loc, obj_name) ->
+      fprintf p "(@[<hov 4>ValObjRuntime@ %a@ %a)@]"
+          print_value_loc loc
+          p4string obj_name
+  | ValObjFun (params, imp) ->
+      fprintf p "(@[<hov 4>ValObjFun@ %a@ %a)@]"
+          print_params params
+          print_value_fun_imp  imp
+  | ValObjAction (scope, params, body) ->
+      fprintf p "(@[<hov 4>ValObjAction@ %a@ %a@ %a)@]"
+          print_env_eval_env scope
+          print_params params
+          print_block body
+  | ValObjPacket bits ->
+      fprintf p "(@[<hov 0>ValObjPacket@ %a)@]"
+          (print_list print_bool) bits
+
+let print_value_constructor p (value: coq_ValueConstructor) =
+  match value with
+  | ValConsParser (scope, constructor_params, params, locals, states) ->
+      fprintf p "(@[<hov 4>ValConsParser@ %a@ %a@ %a@ %a@ %a)@]"
+          print_env_eval_env scope
+          print_params constructor_params
+          print_params params
+          print_decls locals
+          print_parser_states states
+  | ValConsTable (value_table) ->
+      fprintf p "(@[<hov 0>ValConsTable@ %a)@]"
+          print_value_table value_table
+  | ValConsControl (scope, constructor_params, params, locals, apply) ->
+      fprintf p "(@[<hov 4>ValConsControl@ %a@ %a@ %a@ %a@ %a)@]"
+          print_env_eval_env scope
+          print_params constructor_params
+          print_params params
+          print_decls locals
+          print_block apply
+  | ValConsPackage (params, args) ->
+      fprintf p "(@[<hov 4>ValConsPackage@ %a@ %a)@]"
+          print_params params
+          (print_list (print_pair p4string print_value_loc)) args
+  | ValConsExternObj fields ->
+      fprintf p "(@[<hov 0>ValConsExternObj@ %a)@]"
+          (print_list (print_pair p4string (print_params))) fields
+
+let print_value p (value: coq_Value) =
+  match value with
+  | ValBase value ->
+      fprintf p "(@[<hov 0>ValBase@ %a)@]"
+          print_value_base value
+  | ValObj value ->
+      fprintf p "(@[<hov 0>ValBase@ %a)@]"
+          print_value_object value
+  | ValCons value ->
+      fprintf p "(@[<hov 0>ValCons@ %a)@]"
+          print_value_constructor value
+  | ValLvalue value ->
+      fprintf p "(@[<hov 0>ValLvalue@ %a)@]"
+          print_lvalue value
 
 let print_header p =
-  fprintf p "Require Import Coq.Lists.List.@ ";
-  fprintf p "Require Import Coq.Numbers.BinNums.@ ";
-  fprintf p "Require Import Strings.String.@ @ ";
-  fprintf p "Require Import Petr4.P4String.@ ";
-  fprintf p "Require Import Petr4.Syntax.@ ";
-  fprintf p "Require Import Petr4.Typed.@ @ ";
+  fprintf p "Require Import Petr4.P4defs.@ ";
   fprintf p "Open Scope string_scope.@ @ ";
   fprintf p "Import ListNotations.@ @ "
+
 
 let print_program p (program : Prog.program) =
   fprintf p "@[<v 0>";
   print_header p;
-  let decl_names = List.map (print_global_decl p) program in
-  fprintf p "Definition program :=@ %a."
-    (print_list print_string) decl_names;
+  let existing = collect_decl_names program in
+  let decl_names = List.map (print_top_decl p existing) program in
+  let prog_name = Some "prog" in
+  let (f_str, prog_name) = (gen_format_string prog_name "Program@ %a")
+  in fprintf p f_str
+        prog_name
+        (print_list print_string) decl_names;
   fprintf p "@]@."

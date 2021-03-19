@@ -22,5 +22,13 @@ testruns/
 .*.sw?
 .#*
 \#*
+*.p4~
 
+#Coq build files
+*.vo
+*.vok
+*.vos
+*.coq
+*.coq.conf
+*.coq.d
 *.glob
