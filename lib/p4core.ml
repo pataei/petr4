@@ -157,7 +157,7 @@ module Corize (T : Target) : Target = struct
               (if is_fixed
                then P4string.dummy "hdr"
                else P4string.dummy "variableSizeHeader")
-              loc env
+              loc.str env
           in
           env', st''', SContinue, ValBase ValBaseNull
         end
