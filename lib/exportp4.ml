@@ -52,7 +52,7 @@ let print_nat p n =
 let print_bigint p n =
   fprintf p "%s" (Bignum.to_string_accurate (Bignum.of_bigint n))
 
-let p4int p (n : P4int.t) =
+let p4int p (n : Types.P4int.t) =
   fprintf p "{| @[<hov 0>itags := %a;@ value := %a;@ width_signed := %a |}@]" 
       print_info n.tags 
       print_bigint n.value
@@ -67,7 +67,7 @@ let print_direction p (dir: direction) =
     | Directionless -> "Directionless"
   in fprintf p "%s" s
 
-let print_name p (name : Info.t Poulet4.Typed.name) =
+let print_name p (name : Types.P4name.t) =
   match name with
   | BareName s ->
       fprintf p "(@[<hov 0>BareName@ %a)@]" p4string s
