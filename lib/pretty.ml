@@ -59,7 +59,7 @@ module P4Int = struct
   let format_bigint fmt b =
     Format.fprintf fmt "%s" (Bigint.to_string b)
 
-  let format_t fmt (i: P4int.t) =
+  let format_t fmt (i: Types.P4int.t) =
     Format.fprintf fmt "@[";
     (match i.width_signed with
      | None ->
@@ -71,11 +71,11 @@ module P4Int = struct
 end
 
 module P4String = struct
-  let format_t fmt (e: P4string.t) =
+  let format_t fmt (e: Types.P4string.t) =
     Format.fprintf fmt "%s" e.str
 end
 
-let name_format_t fmt (name: P4name.t) =
+let name_format_t fmt (name: Types.P4name.t) =
   match name with
   | BareName str ->
      P4String.format_t fmt str
@@ -316,7 +316,7 @@ end
 and Type : sig
   val format_t : Format.formatter -> P4.Type.t -> unit
   val format_typ_args: Format.formatter -> P4.Type.t list -> unit
-  val format_type_params: Format.formatter -> P4string.t list -> unit
+  val format_type_params: Format.formatter -> Types.P4string.t list -> unit
 end = struct
   open P4.Type
   let rec format_t fmt e =

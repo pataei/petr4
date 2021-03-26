@@ -1,4 +1,6 @@
 open Sexplib.Conv
+module P4string = Types.P4string
+module P4name = Types.P4name
 module T = Typed
 
 type ('a, 'b) sum = [%import:('a, 'b) Poulet4.Datatypes.sum]
@@ -26,7 +28,7 @@ and 'a pre_ExpressionPreT =
     [@with coq_Expression := pre_Expression;
       Bigint.t := Util.bigint;
       Poulet4.P4String.t := P4string.pre_t;
-      Poulet4.P4Int.t := P4int.pre_t;
+      Poulet4.P4Int.t := Types.P4int.pre_t;
       Poulet4.Typed.name := P4name.pre_t;
       Poulet4.Typed.coq_P4Type := T.pre_P4Type;
       Poulet4.Typed.direction := T.direction;
@@ -151,7 +153,7 @@ type 'a pre_Declaration =
            Poulet4.Typed.coq_P4Type := T.pre_P4Type;
            Poulet4.Typed.coq_P4Parameter := T.pre_P4Parameter;
            Poulet4.Datatypes.sum := sum;
-           Poulet4.P4Int.t := P4int.pre_t;
+           Poulet4.P4Int.t := Types.P4int.pre_t;
            coq_ValueBase := pre_ValueBase;
            coq_Expression := pre_Expression;
            coq_Block := pre_Block;

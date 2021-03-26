@@ -30,14 +30,14 @@ let info_of_yojson f json =
 
 module rec KeyValue : sig
   type pre_t =
-    { key : P4string.t;
+    { key : CoqImports.P4string.t;
       value : Expression.t }
   [@@deriving sexp,show,yojson]
 
   type t = pre_t info [@@deriving sexp,show,yojson]
 end = struct
   type pre_t =
-    { key : P4string.t;
+    { key : CoqImports.P4string.t;
       value : Expression.t }
   [@@deriving sexp,show,yojson]
 
@@ -47,7 +47,7 @@ end
 and Annotation : sig
   type pre_body =
     | Empty
-    | Unparsed of P4string.t list
+    | Unparsed of CoqImports.P4string.t list
     | Expression of Expression.t list
     | KeyValue of KeyValue.t list
   [@@deriving sexp,show,yojson]
@@ -55,7 +55,7 @@ and Annotation : sig
   type body = pre_body info [@@deriving sexp,show,yojson]
 
   type pre_t =
-    { name: P4string.t;
+    { name: CoqImports.P4string.t;
       body: body }
   [@@deriving sexp,show,yojson]
 
@@ -63,7 +63,7 @@ and Annotation : sig
 end = struct
   type pre_body =
     | Empty
-    | Unparsed of P4string.t list
+    | Unparsed of CoqImports.P4string.t list
     | Expression of Expression.t list
     | KeyValue of KeyValue.t list
   [@@deriving sexp,show,yojson]
@@ -71,7 +71,7 @@ end = struct
   type body = pre_body info [@@deriving sexp,show,yojson]
 
   type pre_t =
-    { name: P4string.t;
+    { name: CoqImports.P4string.t;
       body: body }
   [@@deriving sexp,show,yojson]
 
@@ -83,7 +83,7 @@ and Parameter : sig
     { annotations: Annotation.t list;
       direction: Direction.t option;
       typ: Type.t;
-      variable: P4string.t;
+      variable: CoqImports.P4string.t;
       opt_value: Expression.t option}
   [@@deriving sexp,show,yojson]
 
@@ -93,7 +93,7 @@ end = struct
     { annotations: Annotation.t list;
       direction: Direction.t option;
       typ: Type.t [@name "type"];
-      variable: P4string.t;
+      variable: CoqImports.P4string.t;
       opt_value: Expression.t option}
   [@@deriving sexp,show,yojson]
 
@@ -215,7 +215,7 @@ and Type : sig
     | BitType of Expression.t
     | VarBit of Expression.t
     (* this could be a typename or a type variable. *)
-    | TypeName of P4name.t
+    | TypeName of CoqImports.P4name.t
     | SpecializedType of
         { base: t;
           args: t list }
@@ -239,7 +239,7 @@ end = struct
     | IntType of Expression.t [@name "int"]
     | BitType of Expression.t  [@name "bit"]
     | VarBit of Expression.t  [@name "varbit"]
-    | TypeName of P4name.t [@name "name"]
+    | TypeName of CoqImports.P4name.t [@name "name"]
     | SpecializedType of
         { base: t;
           args: t list } [@name "specialized"]
@@ -266,7 +266,7 @@ end = struct
     | BitType e1, BitType e2 -> failwith "TODO"
     | VarBit e1, VarBit e2 -> failwith "TODO"
     | TypeName n1, TypeName n2 ->
-      P4name.name_eq n1 n2
+      CoqImports.P4name.name_eq n1 n2
     | SpecializedType { base=b1; args=a1 },
       SpecializedType { base=b2; args=a2 }
       -> eq b1 b2 &&
@@ -289,19 +289,19 @@ and MethodPrototype : sig
   type pre_t =
     Constructor of
       { annotations: Annotation.t list;
-        name: P4string.t;
+        name: CoqImports.P4string.t;
         params: Parameter.t list }
   | AbstractMethod of
       { annotations: Annotation.t list;
         return: Type.t;
-        name: P4string.t;
-        type_params: P4string.t list;
+        name: CoqImports.P4string.t;
+        type_params: CoqImports.P4string.t list;
         params: Parameter.t list}
   | Method of
       { annotations: Annotation.t list;
         return: Type.t;
-        name: P4string.t;
-        type_params: P4string.t list;
+        name: CoqImports.P4string.t;
+        type_params: CoqImports.P4string.t list;
         params: Parameter.t list}
         [@@deriving sexp,show,yojson]
 
@@ -310,19 +310,19 @@ end = struct
   type pre_t =
     Constructor of
       { annotations: Annotation.t list;
-        name: P4string.t;
+        name: CoqImports.P4string.t;
         params: Parameter.t list }
   | AbstractMethod of
       { annotations: Annotation.t list;
         return: Type.t;
-        name: P4string.t;
-        type_params: P4string.t list;
+        name: CoqImports.P4string.t;
+        type_params: CoqImports.P4string.t list;
         params: Parameter.t list}
   | Method of
       { annotations: Annotation.t list;
         return: Type.t;
-        name: P4string.t;
-        type_params: P4string.t list;
+        name: CoqImports.P4string.t;
+        type_params: CoqImports.P4string.t list;
         params: Parameter.t list}
     [@@deriving sexp,show,yojson]
 
@@ -334,7 +334,7 @@ and Argument : sig
           Expression of
             { value: Expression.t }
         | KeyValue of
-            { key: P4string.t;
+            { key: CoqImports.P4string.t;
               value: Expression.t }
         | Missing
       [@@deriving sexp,show,yojson]
@@ -345,7 +345,7 @@ and Argument : sig
                      Expression of
                        { value: Expression.t }
                    | KeyValue of
-                       { key: P4string.t;
+                       { key: CoqImports.P4string.t;
                          value: Expression.t }
                    | Missing
                  [@@deriving sexp,show,yojson]
@@ -375,9 +375,9 @@ and Expression : sig
       type pre_t =
           True
         | False
-        | Int of P4int.t
-        | String of P4string.t
-        | Name of P4name.t
+        | Int of CoqImports.P4int.t
+        | String of CoqImports.P4string.t
+        | Name of CoqImports.P4name.t
         | ArrayAccess of
             { array: t;
               index: t }
@@ -399,12 +399,12 @@ and Expression : sig
             { typ: Type.t;
               expr: t }
         | TypeMember of
-            { typ: P4name.t;
-              name: P4string.t }
-        | ErrorMember of P4string.t
+            { typ: CoqImports.P4name.t;
+              name: CoqImports.P4string.t }
+        | ErrorMember of CoqImports.P4string.t
         | ExpressionMember of
             { expr: t;
-              name: P4string.t }
+              name: CoqImports.P4string.t }
         | Ternary of
             { cond: t;
               tru: t;
@@ -429,9 +429,9 @@ end = struct
   type pre_t =
       True [@name "true"]
     | False  [@name "false"]
-    | Int of P4int.t  [@name "int"]
-    | String of P4string.t [@name "string"]
-    | Name of P4name.t [@name "name"]
+    | Int of CoqImports.P4int.t  [@name "int"]
+    | String of CoqImports.P4string.t [@name "string"]
+    | Name of CoqImports.P4name.t [@name "name"]
     | ArrayAccess of
         { array: t;
           index: t } [@name "array_access"]
@@ -453,12 +453,12 @@ end = struct
         { typ: Type.t [@key "type"];
           expr: t }  [@name "cast"]
     | TypeMember of
-        { typ: P4name.t [@key "type"];
-          name: P4string.t } [@name "type_member"]
-    | ErrorMember of P4string.t [@name "error_member"]
+        { typ: CoqImports.P4name.t [@key "type"];
+          name: CoqImports.P4string.t } [@name "type_member"]
+    | ErrorMember of CoqImports.P4string.t [@name "error_member"]
     | ExpressionMember of
         { expr: t;
-          name: P4string.t } [@name "expression_member"]
+          name: CoqImports.P4string.t } [@name "expression_member"]
     | Ternary of
         { cond: t;
           tru: t;
@@ -484,7 +484,7 @@ end
 and Table : sig
       type pre_action_ref =
         { annotations: Annotation.t list;
-          name: P4name.t;
+          name: CoqImports.P4name.t;
           args: Argument.t list }
       [@@deriving sexp,show,yojson]
 
@@ -493,7 +493,7 @@ and Table : sig
       type pre_key =
         { annotations: Annotation.t list;
           key: Expression.t;
-          match_kind: P4string.t }
+          match_kind: CoqImports.P4string.t }
       [@@deriving sexp,show,yojson]
 
       type key = pre_key info [@@deriving sexp,show,yojson]
@@ -516,7 +516,7 @@ and Table : sig
         | Custom of
             { annotations: Annotation.t list;
               const: bool;
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               value: Expression.t }
       [@@deriving sexp,show,yojson]
 
@@ -526,7 +526,7 @@ and Table : sig
     end = struct
               type pre_action_ref =
                 { annotations: Annotation.t list;
-                  name: P4name.t;
+                  name: CoqImports.P4name.t;
                   args: Argument.t list }
               [@@deriving sexp,show,yojson]
 
@@ -535,7 +535,7 @@ and Table : sig
               type pre_key =
                 { annotations: Annotation.t list;
                   key: Expression.t;
-                  match_kind: P4string.t }
+                  match_kind: CoqImports.P4string.t }
               [@@deriving sexp,show,yojson]
 
               type key = pre_key info [@@deriving sexp,show,yojson]
@@ -558,7 +558,7 @@ and Table : sig
                 | Custom of
                     { annotations: Annotation.t list;
                       const: bool;
-                      name: P4string.t;
+                      name: CoqImports.P4string.t;
                       value: Expression.t }
               [@@deriving sexp,show,yojson]
 
@@ -595,14 +595,14 @@ and Match : sig
 and Parser : sig
       type pre_case =
         { matches: Match.t list;
-          next: P4string.t }
+          next: CoqImports.P4string.t }
       [@@deriving sexp,show,yojson { exn = true }]
 
       type case = pre_case info [@@deriving sexp,show,yojson]
 
       type pre_transition =
           Direct of
-            { next: P4string.t }
+            { next: CoqImports.P4string.t }
         | Select of
             { exprs: Expression.t list;
               cases: case list }
@@ -612,7 +612,7 @@ and Parser : sig
 
       type pre_state =
         { annotations: Annotation.t list;
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           statements: Statement.t list;
           transition: transition }
       [@@deriving sexp,show,yojson]
@@ -621,14 +621,14 @@ and Parser : sig
     end = struct
                type pre_case =
                  { matches: Match.t list;
-                   next: P4string.t }
+                   next: CoqImports.P4string.t }
                [@@deriving sexp,show,yojson { exn = true }]
 
                type case = pre_case info [@@deriving sexp,show,yojson]
 
                type pre_transition =
                    Direct of
-                     { next: P4string.t }
+                     { next: CoqImports.P4string.t }
                  | Select of
                      { exprs: Expression.t list;
                        cases: case list }
@@ -638,7 +638,7 @@ and Parser : sig
 
                type pre_state =
                  { annotations: Annotation.t list;
-                   name: P4string.t;
+                   name: CoqImports.P4string.t;
                    statements: Statement.t list;
                    transition: transition }
                [@@deriving sexp,show,yojson]
@@ -651,113 +651,113 @@ and Declaration : sig
           Constant of
             { annotations: Annotation.t list;
               typ: Type.t [@key "type"];
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               value: Expression.t }
         | Instantiation of
             { annotations: Annotation.t list;
               typ: Type.t [@key "type"];
               args: Argument.t list;
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               init: Block.t option; }
         | Parser of
             { annotations: Annotation.t list;
-              name: P4string.t;
-              type_params: P4string.t list;
+              name: CoqImports.P4string.t;
+              type_params: CoqImports.P4string.t list;
               params: Parameter.t list;
               constructor_params: Parameter.t list;
               locals: t list;
               states: Parser.state list }
         | Control of
             { annotations: Annotation.t list;
-              name: P4string.t;
-              type_params: P4string.t list;
+              name: CoqImports.P4string.t;
+              type_params: CoqImports.P4string.t list;
               params: Parameter.t list;
               constructor_params: Parameter.t list;
               locals: t list;
               apply: Block.t }
         | Function of
             { return: Type.t;
-              name: P4string.t;
-              type_params: P4string.t list;
+              name: CoqImports.P4string.t;
+              type_params: CoqImports.P4string.t list;
               params: Parameter.t list;
               body: Block.t }
         | ExternFunction of
             { annotations: Annotation.t list;
               return: Type.t;
-              name: P4string.t;
-              type_params: P4string.t list;
+              name: CoqImports.P4string.t;
+              type_params: CoqImports.P4string.t list;
               params: Parameter.t list }
         | Variable of
             { annotations: Annotation.t list;
               typ: Type.t [@key "type"];
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               init: Expression.t option }
         | ValueSet of
             { annotations: Annotation.t list;
               typ: Type.t [@key "type"];
               size: Expression.t;
-              name: P4string.t }
+              name: CoqImports.P4string.t }
         | Action of
             { annotations: Annotation.t list;
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               params: Parameter.t list;
               body: Block.t }
         | Table of
             { annotations: Annotation.t list;
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               properties: Table.property list }
         | Header of
             { annotations: Annotation.t list;
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               fields: field list }
         | HeaderUnion of
             { annotations: Annotation.t list;
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               fields: field list }
         | Struct of
             { annotations: Annotation.t list;
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               fields: field list }
         | Error of
-            { members: P4string.t list }
+            { members: CoqImports.P4string.t list }
         | MatchKind of
-            { members: P4string.t list }
+            { members: CoqImports.P4string.t list }
         | Enum of
             { annotations: Annotation.t list;
-              name: P4string.t;
-              members: P4string.t list }
+              name: CoqImports.P4string.t;
+              members: CoqImports.P4string.t list }
         | SerializableEnum of
             { annotations: Annotation.t list;
               typ: Type.t [@key "type"];
-              name: P4string.t;
-              members: (P4string.t * Expression.t) list }
+              name: CoqImports.P4string.t;
+              members: (CoqImports.P4string.t * Expression.t) list }
         | ExternObject of
             { annotations: Annotation.t list;
-              name: P4string.t;
-              type_params: P4string.t list;
+              name: CoqImports.P4string.t;
+              type_params: CoqImports.P4string.t list;
               methods: MethodPrototype.t list }
         | TypeDef of
             { annotations: Annotation.t list;
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               typ_or_decl: (Type.t, t) alternative }
         | NewType of
             { annotations: Annotation.t list;
-              name: P4string.t;
+              name: CoqImports.P4string.t;
               typ_or_decl: (Type.t, t) alternative }
         | ControlType of
             { annotations: Annotation.t list;
-              name: P4string.t;
-              type_params: P4string.t list;
+              name: CoqImports.P4string.t;
+              type_params: CoqImports.P4string.t list;
               params: Parameter.t list }
         | ParserType of
             { annotations: Annotation.t list;
-              name: P4string.t;
-              type_params: P4string.t list;
+              name: CoqImports.P4string.t;
+              type_params: CoqImports.P4string.t list;
               params: Parameter.t list }
         | PackageType of
             { annotations: Annotation.t list;
-              name: P4string.t;
-              type_params: P4string.t list;
+              name: CoqImports.P4string.t;
+              type_params: CoqImports.P4string.t list;
               params: Parameter.t list }
       [@@deriving sexp,show,yojson]
 
@@ -766,39 +766,39 @@ and t = pre_t info [@@deriving sexp,show,yojson]
 and pre_field =
     { annotations: Annotation.t list;
       typ: Type.t [@key "type"];
-      name: P4string.t } [@@deriving sexp,show,yojson]
+      name: CoqImports.P4string.t } [@@deriving sexp,show,yojson]
 
 and field = pre_field info [@@deriving sexp,show,yojson]
 
-val name : t -> P4string.t
+val name : t -> CoqImports.P4string.t
 
-val name_opt : t -> P4string.t option
+val name_opt : t -> CoqImports.P4string.t option
 
 end = struct
   type pre_t =
       Constant of
         { annotations: Annotation.t list;
           typ: Type.t [@key "type"];
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           value: Expression.t }
     | Instantiation of
         { annotations: Annotation.t list;
           typ: Type.t [@key "type"];
           args: Argument.t list;
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           init: Block.t option; }
     | Parser of
         { annotations: Annotation.t list;
-          name: P4string.t;
-          type_params: P4string.t list;
+          name: CoqImports.P4string.t;
+          type_params: CoqImports.P4string.t list;
           params: Parameter.t list;
           constructor_params: Parameter.t list;
           locals: t list;
           states: Parser.state list }
     | Control of
         { annotations: Annotation.t list;
-          name: P4string.t;
-          type_params: P4string.t list;
+          name: CoqImports.P4string.t;
+          type_params: CoqImports.P4string.t list;
           params: Parameter.t list;
           constructor_params: Parameter.t list;
           locals: t list;
@@ -806,87 +806,87 @@ end = struct
           [@name "control"]
     | Function of
         { return: Type.t;
-          name: P4string.t;
-          type_params: P4string.t list;
+          name: CoqImports.P4string.t;
+          type_params: CoqImports.P4string.t list;
           params: Parameter.t list;
           body: Block.t }
     | ExternFunction of
         { annotations: Annotation.t list;
           return: Type.t;
-          name: P4string.t;
-          type_params: P4string.t list;
+          name: CoqImports.P4string.t;
+          type_params: CoqImports.P4string.t list;
           params: Parameter.t list }
     | Variable of
         { annotations: Annotation.t list;
           typ: Type.t [@key "type"];
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           init: Expression.t option }
     | ValueSet of
         { annotations: Annotation.t list;
           typ: Type.t [@key "type"];
           size: Expression.t;
-          name: P4string.t }
+          name: CoqImports.P4string.t }
     | Action of
         { annotations: Annotation.t list;
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           params: Parameter.t list;
           body: Block.t }
     | Table of
         { annotations: Annotation.t list;
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           properties: Table.property list }
     | Header of
         { annotations: Annotation.t list;
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           fields: field list }
     | HeaderUnion of
         { annotations: Annotation.t list;
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           fields: field list }
     | Struct of
         { annotations: Annotation.t list;
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           fields: field list }
     | Error of
-        { members: P4string.t list }
+        { members: CoqImports.P4string.t list }
     | MatchKind of
-        { members: P4string.t list }
+        { members: CoqImports.P4string.t list }
     | Enum of
         { annotations: Annotation.t list;
-          name: P4string.t;
-          members: P4string.t list }
+          name: CoqImports.P4string.t;
+          members: CoqImports.P4string.t list }
     | SerializableEnum of
         { annotations: Annotation.t list;
           typ: Type.t [@key "type"];
-          name: P4string.t;
-          members: (P4string.t * Expression.t) list }
+          name: CoqImports.P4string.t;
+          members: (CoqImports.P4string.t * Expression.t) list }
     | ExternObject of
         { annotations: Annotation.t list;
-          name: P4string.t;
-          type_params: P4string.t list;
+          name: CoqImports.P4string.t;
+          type_params: CoqImports.P4string.t list;
           methods: MethodPrototype.t list }
     | TypeDef of
         { annotations: Annotation.t list;
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           typ_or_decl: (Type.t, t) alternative }
     | NewType of
         { annotations: Annotation.t list;
-          name: P4string.t;
+          name: CoqImports.P4string.t;
           typ_or_decl: (Type.t, t) alternative }
     | ControlType of
         { annotations: Annotation.t list;
-          name: P4string.t;
-          type_params: P4string.t list;
+          name: CoqImports.P4string.t;
+          type_params: CoqImports.P4string.t list;
           params: Parameter.t list }
     | ParserType of
         { annotations: Annotation.t list;
-          name: P4string.t;
-          type_params: P4string.t list;
+          name: CoqImports.P4string.t;
+          type_params: CoqImports.P4string.t list;
           params: Parameter.t list }
     | PackageType of
         { annotations: Annotation.t list;
-          name: P4string.t;
-          type_params: P4string.t list;
+          name: CoqImports.P4string.t;
+          type_params: CoqImports.P4string.t list;
           params: Parameter.t list }
   [@@deriving sexp,show,yojson]
 
@@ -895,7 +895,7 @@ and t = pre_t info [@@deriving sexp,show,yojson]
 and pre_field =
     { annotations: Annotation.t list;
       typ: Type.t [@key "type"];
-      name: P4string.t } [@@deriving sexp,show,yojson]
+      name: CoqImports.P4string.t } [@@deriving sexp,show,yojson]
 
 and field = pre_field info [@@deriving sexp,show,yojson]
 
@@ -936,7 +936,7 @@ end
 and Statement : sig
       type pre_switch_label =
           Default
-        | Name of P4string.t
+        | Name of CoqImports.P4string.t
       [@@deriving sexp,show,yojson]
 
       type switch_label = pre_switch_label info [@@deriving sexp,show,yojson]
@@ -983,7 +983,7 @@ and t = pre_t info [@@deriving sexp,show,yojson]
 end = struct
   type pre_switch_label =
       Default [@name "default"]
-    | Name of P4string.t [@name "name"]
+    | Name of CoqImports.P4string.t [@name "name"]
   [@@deriving sexp,show,yojson]
 
   type switch_label = pre_switch_label info [@@deriving sexp,show,yojson]
@@ -1044,6 +1044,112 @@ and Block : sig
 
               type t = pre_t info [@@deriving sexp,show,yojson]
             end
+
+(* I wanted this to be two more [and ...] mutually recursive modules,
+   but ppx_import had trouble with the @with clauses so I put them
+   inside a larger mutually recursive module, which ppx_import doesn't
+   complain about. They're aliased below so that you can write, e.g.,
+   Types.P4string and not Types.CoqImports.P4string. - Ryan *)
+and CoqImports : sig
+  module P4string : sig
+    type 'a pre_t = [%import:'a Poulet4.P4String.t]
+    [@@deriving sexp,show,yojson]
+    type t = (Info.t * Annotation.t list) pre_t
+    [@@deriving sexp,show,yojson]
+    val eq: 'a pre_t -> 'a pre_t -> bool
+    val neq: 'a pre_t -> 'a pre_t -> bool
+    val dummy: string -> t
+  end
+
+  module P4name : sig
+    type 'a pre_t =
+      [%import:'a Poulet4.Typed.name
+        [@with Poulet4.P4String.t := P4string.pre_t]]
+    [@@deriving sexp,show,yojson]
+    type t = (Info.t * Annotation.t list) pre_t
+    [@@deriving sexp,show,yojson]
+
+    val to_bare : t -> t
+    val name_info: t -> Info.t
+    val name_eq : t -> t -> bool
+    val name_only : t -> string
+  end
+
+  module P4int : sig
+    type 'a pre_t =
+    [%import:'a Poulet4.P4Int.t
+        [@with Bigint.t := Util.bigint]]
+    [@@deriving sexp,show,yojson]
+
+    type t = (Info.t * Annotation.t list) pre_t
+    [@@deriving sexp,show,yojson]
+  end
+end = struct
+  module P4string = struct
+    type 'a pre_t = [%import:'a Poulet4.P4String.t]
+    [@@deriving sexp,show,yojson]
+    type t = (Info.t * Annotation.t list) pre_t
+    [@@deriving sexp,show,yojson]
+
+    let eq x y =
+      x.str = y.str
+
+    let neq x y =
+      not (eq x y)
+
+    let dummy s =
+      { tags = (Info.dummy, []); str = s }
+  end
+
+  module P4name = struct
+    type 'a pre_t =
+      [%import:'a Poulet4.Typed.name
+              [@with Poulet4.P4String.t := P4string.pre_t]]
+    [@@deriving sexp,show,yojson]
+    type t = (Info.t * Annotation.t list) pre_t
+    [@@deriving sexp,show,yojson]
+
+    let to_bare : t -> t = function
+      | BareName n
+      | QualifiedName (_, n) -> BareName n
+
+    let name_info (name: t) : Info.t =
+      match name with
+      | BareName name -> fst name.tags
+      | QualifiedName (prefix, name) ->
+        let infos = List.map (fun x -> fst x.P4string.tags) prefix in
+        List.fold_right Info.merge infos (fst name.tags)
+
+    let name_eq n1 n2 =
+      match n1, n2 with
+      | BareName s1,
+        BareName s2 ->
+        s1.str = s2.str
+      | QualifiedName ([], s1),
+        QualifiedName ([], s2) ->
+        s1.str = s2.str
+      | _ -> false
+
+    and name_only n =
+      match n with
+      | BareName s -> s.str
+      | QualifiedName (_, s) -> s.str
+  end
+
+  module P4int = struct
+    type 'a pre_t =
+    [%import:'a Poulet4.P4Int.t
+        [@with Bigint.t := Util.bigint]]
+    [@@deriving sexp,show,yojson]
+
+    type t = (Info.t * Annotation.t list) pre_t
+    [@@deriving sexp,show,yojson]
+  end
+end
+
+module P4string = CoqImports.P4string
+module P4name = CoqImports.P4name
+module P4int = CoqImports.P4int
 
 type program =
     Program of Declaration.t list [@name "program"]

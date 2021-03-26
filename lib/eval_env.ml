@@ -1,3 +1,4 @@
+open Types
 open Typed
 open Core_kernel
 

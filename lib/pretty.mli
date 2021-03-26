@@ -14,11 +14,11 @@
 *)
 
 module P4Int : sig
-  val format_t : Format.formatter -> P4int.t -> unit
+  val format_t : Format.formatter -> Types.P4int.t -> unit
 end
 
 module P4String : sig
-  val format_t : Format.formatter -> P4string.t -> unit
+  val format_t : Format.formatter -> Types.P4string.t -> unit
 end
 
 module Expression : sig

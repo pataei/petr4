@@ -1,4 +1,6 @@
 open Sexplib.Conv
+open Types
+
 type direction = [%import:Poulet4.Typed.direction]
   [@@deriving sexp,show,yojson]
 
@@ -43,22 +45,22 @@ and pre_P4Parameter =
     [@with Poulet4.P4String.t := P4string.pre_t;
            coq_P4Type := pre_P4Type]]
   [@@deriving sexp,show,yojson]
-type coq_P4Type = Info.t pre_P4Type
+type coq_P4Type = (Info.t * Types.Annotation.t list) pre_P4Type
 [@@deriving sexp,show,yojson]
-type coq_FieldType = Info.t pre_FieldType
+type coq_FieldType = (Info.t * Types.Annotation.t list) pre_FieldType
 [@@deriving sexp,show,yojson]
-type coq_FunctionType = Info.t pre_FunctionType
+type coq_FunctionType = (Info.t * Types.Annotation.t list) pre_FunctionType
 [@@deriving sexp,show,yojson]
-type coq_ControlType = Info.t pre_ControlType
+type coq_ControlType = (Info.t * Types.Annotation.t list) pre_ControlType
 [@@deriving sexp,show,yojson]
-type coq_P4Parameter = Info.t pre_P4Parameter
+type coq_P4Parameter = (Info.t * Types.Annotation.t list) pre_P4Parameter
 [@@deriving sexp,show,yojson]
 
 type 'a pre_StmtContext =
   [%import:'a Poulet4.Typed.coq_StmtContext
     [@with coq_P4Type := pre_P4Type]]
   [@@deriving sexp,show,yojson]
-type coq_StmtContext = Info.t pre_StmtContext
+type coq_StmtContext = (Info.t * Types.Annotation.t list) pre_StmtContext
   [@@deriving sexp,show,yojson]
 
 type 'a pre_DeclContext =
@@ -66,7 +68,7 @@ type 'a pre_DeclContext =
           [@with coq_P4Type := pre_P4Type;
                  coq_StmtContext := pre_StmtContext]]
   [@@deriving sexp,show,yojson]
-type coq_DeclContext = Info.t pre_DeclContext
+type coq_DeclContext = (Info.t * Types.Annotation.t list) pre_DeclContext
   [@@deriving sexp,show,yojson]
 
 let eq_dir d1 d2 =

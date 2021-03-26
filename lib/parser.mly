@@ -31,8 +31,9 @@ let rec smash_annotations l tok2 =
   | [] ->
      [tok2]
   | [tok1] ->
-     if Info.follows tok1.tags tok2.tags then
-       [{tags = Info.merge tok1.tags tok2.tags; str = tok1.str ^ tok2.str}]
+     if Info.follows (fst tok1.tags) (fst tok2.tags) then
+       [{tags = (Info.merge (fst tok1.tags) (fst tok2.tags), []);
+	 str = tok1.str ^ tok2.str}]
      else
        [tok1; tok2]
   | h::t -> h::smash_annotations t tok2
@@ -42,8 +43,8 @@ let rec smash_annotations l tok2 =
 (*************************** TOKENS *******************************)
 %token<Info.t> END
 %token TYPENAME IDENTIFIER
-%token<P4string.t> NAME STRING_LITERAL
-%token<P4int.t * string> INTEGER
+%token<Types.P4string.t> NAME STRING_LITERAL
+%token<Types.P4int.t * string> INTEGER
 %token<Info.t> LE GE SHL AND OR NE EQ
 %token<Info.t> PLUS MINUS PLUS_SAT MINUS_SAT MUL DIV MOD
 %token<Info.t> BIT_OR BIT_AND BIT_XOR COMPLEMENT
@@ -58,7 +59,7 @@ let rec smash_annotations l tok2 =
 %token<Info.t> INT KEY SELECT MATCH_KIND OUT PACKAGE PARSER RETURN STATE STRING STRUCT
 %token<Info.t> SWITCH TABLE THEN TRANSITION TUPLE TYPE TYPEDEF VARBIT VALUESET VOID
 %token<Info.t> PRAGMA PRAGMA_END
-%token<P4string.t> UNEXPECTED_TOKEN
+%token<Types.P4string.t> UNEXPECTED_TOKEN
 
 (********************** PRIORITY AND ASSOCIATIVITY ************************)
 %right THEN ELSE   (* Precedence of THEN token is artificial *)
@@ -246,25 +247,25 @@ varName:
 ;
 
 tableKwName:
-| info = KEY { {tags=info; str="key"} }
-| info = ACTIONS { {tags=info; str="actions"} }
-| info = ENTRIES { {tags=info; str="entries"} }
+| info = KEY { {tags=(info, []); str="key"} }
+| info = ACTIONS { {tags=(info, []); str="actions"} }
+| info = ENTRIES { {tags=(info, []); str="entries"} }
 ;
 
 nonTableKwName:
 | n = varName { n }
 | n = NAME TYPENAME { n }
-| info = APPLY { {tags=info; str="apply"} }
-| info = STATE { {tags=info; str="state"} }
-| info = TYPE { {tags=info; str="type"} }
+| info = APPLY { {tags=(info, []); str="apply"} }
+| info = STATE { {tags=(info, []); str="state"} }
+| info = TYPE { {tags=(info, []); str="type"} }
 ;
 
 nonTypeName:
 | n = varName { n }
 | n = tableKwName { n }
-| info = APPLY { {tags=info; str="apply"} }
-| info = STATE { {tags=info; str="state"} }
-| info = TYPE { {tags=info; str="type"} }
+| info = APPLY { {tags=(info, []); str="apply"} }
+| info = STATE { {tags=(info, []); str="state"} }
+| info = TYPE { {tags=(info, []); str="type"} }
 ;
 
 name:
@@ -283,7 +284,7 @@ annotations:
 
 annotation:
 | info1 = AT name = name
-    { let info2 = name.tags in
+    { let info2 = fst name.tags in
       let body = (info2, Annotation.Empty) in 
       (Info.merge info1 info2,
        Annotation.{ name; body } ) }
@@ -320,91 +321,91 @@ annotationBody:
 
 annotationToken:
 | UNEXPECTED_TOKEN { $1 }
-| ABSTRACT         { {tags=$1; str="abstract"} }
-| ACTION           { {tags=$1; str="action"} }
-| ACTIONS          { {tags=$1; str="actions"} }
-| APPLY            { {tags=$1; str="apply"} }
-| BOOL             { {tags=$1; str="bool"} }
-| BIT              { {tags=$1; str="bit"} }
-| CONST            { {tags=$1; str="const"} }
-| CONTROL          { {tags=$1; str="control"} }
-| DEFAULT          { {tags=$1; str="default"} }
-| ELSE             { {tags=$1; str="else"} }
-| ENTRIES          { {tags=$1; str="entries"} }
-| ENUM             { {tags=$1; str="enum"} }
-| ERROR            { {tags=$1; str="error"} }
-| EXIT             { {tags=$1; str="exit"} }
-| EXTERN           { {tags=$1; str="extern"} }
-| FALSE            { {tags=$1; str="false"} }
-| HEADER           { {tags=$1; str="header"} }
-| HEADER_UNION     { {tags=$1; str="header_union"} }
-| IF               { {tags=$1; str="if"} }
-| IN               { {tags=$1; str="in"} }
-| INOUT            { {tags=$1; str="inout"} }
-| INT              { {tags=$1; str="int"} }
-| KEY              { {tags=$1; str="key"} }
-| MATCH_KIND       { {tags=$1; str="match_kind"} }
-| TYPE             { {tags=$1; str="type"} }
-| OUT              { {tags=$1; str="out"} }
-| PARSER           { {tags=$1; str="parser"} }
-| PACKAGE          { {tags=$1; str="package"} }
-| PRAGMA           { {tags=$1; str="pragma"} }
-| RETURN           { {tags=$1; str="return"} }
-| SELECT           { {tags=$1; str="select"} }
-| STATE            { {tags=$1; str="state"} }
-| STRING           { {tags=$1; str="string"} }
-| STRUCT           { {tags=$1; str="struct"} }
-| SWITCH           { {tags=$1; str="switch"} }
-| TABLE            { {tags=$1; str="table"} }
-(* | THIS             { {tags=$1; str="this") } *)
-| TRANSITION       { {tags=$1; str="transition"} }
-| TRUE             { {tags=$1; str="true"} }
-| TUPLE            { {tags=$1; str="tuple"} }
-| TYPEDEF          { {tags=$1; str="typedef"} }
-| VARBIT           { {tags=$1; str="varbit"} }
-| VALUESET         { {tags=$1; str="valueset"} }
-| VOID             { {tags=$1; str="void"} }
-| DONTCARE         { {tags=$1; str="_"} }
+| ABSTRACT         { {tags=($1, []); str="abstract"} }
+| ACTION           { {tags=($1, []); str="action"} }
+| ACTIONS          { {tags=($1, []); str="actions"} }
+| APPLY            { {tags=($1, []); str="apply"} }
+| BOOL             { {tags=($1, []); str="bool"} }
+| BIT              { {tags=($1, []); str="bit"} }
+| CONST            { {tags=($1, []); str="const"} }
+| CONTROL          { {tags=($1, []); str="control"} }
+| DEFAULT          { {tags=($1, []); str="default"} }
+| ELSE             { {tags=($1, []); str="else"} }
+| ENTRIES          { {tags=($1, []); str="entries"} }
+| ENUM             { {tags=($1, []); str="enum"} }
+| ERROR            { {tags=($1, []); str="error"} }
+| EXIT             { {tags=($1, []); str="exit"} }
+| EXTERN           { {tags=($1, []); str="extern"} }
+| FALSE            { {tags=($1, []); str="false"} }
+| HEADER           { {tags=($1, []); str="header"} }
+| HEADER_UNION     { {tags=($1, []); str="header_union"} }
+| IF               { {tags=($1, []); str="if"} }
+| IN               { {tags=($1, []); str="in"} }
+| INOUT            { {tags=($1, []); str="inout"} }
+| INT              { {tags=($1, []); str="int"} }
+| KEY              { {tags=($1, []); str="key"} }
+| MATCH_KIND       { {tags=($1, []); str="match_kind"} }
+| TYPE             { {tags=($1, []); str="type"} }
+| OUT              { {tags=($1, []); str="out"} }
+| PARSER           { {tags=($1, []); str="parser"} }
+| PACKAGE          { {tags=($1, []); str="package"} }
+| PRAGMA           { {tags=($1, []); str="pragma"} }
+| RETURN           { {tags=($1, []); str="return"} }
+| SELECT           { {tags=($1, []); str="select"} }
+| STATE            { {tags=($1, []); str="state"} }
+| STRING           { {tags=($1, []); str="string"} }
+| STRUCT           { {tags=($1, []); str="struct"} }
+| SWITCH           { {tags=($1, []); str="switch"} }
+| TABLE            { {tags=($1, []); str="table"} }
+(* | THIS             { {tags=($1, []); str="this") } *)
+| TRANSITION       { {tags=($1, []); str="transition"} }
+| TRUE             { {tags=($1, []); str="true"} }
+| TUPLE            { {tags=($1, []); str="tuple"} }
+| TYPEDEF          { {tags=($1, []); str="typedef"} }
+| VARBIT           { {tags=($1, []); str="varbit"} }
+| VALUESET         { {tags=($1, []); str="valueset"} }
+| VOID             { {tags=($1, []); str="void"} }
+| DONTCARE         { {tags=($1, []); str="_"} }
 | NAME IDENTIFIER  { $1 }
 | NAME TYPENAME    { $1 }
 | STRING_LITERAL   { {tags=$1.tags; str = "\"" ^ $1.str ^ "\""} }
 | INTEGER          { let i, str = $1 in 
                      {tags=i.tags; str} }
-| MASK             { {tags=$1; str="&&&"} }
-| RANGE            { {tags=$1; str=".."} }
-| SHL              { {tags=$1; str="<<"} }
-| AND              { {tags=$1; str="&&"} }
-| OR               { {tags=$1; str="||"} }
-| EQ               { {tags=$1; str="=="} }
-| NE               { {tags=$1; str="!="} }
-| GE               { {tags=$1; str=">="} }
-| LE               { {tags=$1; str="<="} }
-| PLUSPLUS         { {tags=$1; str="++"} }
-| PLUS             { {tags=$1; str="+"} }
-| PLUS_SAT         { {tags=$1; str="|+|"} }
-| MINUS            { {tags=$1; str="-"} }
-| MINUS_SAT        { {tags=$1; str="|-|"} }
-| MUL              { {tags=$1; str="*"} }
-| DIV              { {tags=$1; str="/"} }
-| MOD              { {tags=$1; str="%"} }
-| BIT_OR           { {tags=$1; str="|"} }
-| BIT_AND          { {tags=$1; str="&"} }
-| BIT_XOR          { {tags=$1; str="^"} }
-| COMPLEMENT       { {tags=$1; str="~"} }
-| L_BRACKET        { {tags=$1; str="["} }
-| R_BRACKET        { {tags=$1; str="]"} }
-| L_BRACE          { {tags=$1; str="{"} }
-| R_BRACE          { {tags=$1; str="}"} }
-| L_ANGLE          { {tags=$1; str="<"} }
-| R_ANGLE          { {tags=$1; str=">"} }
-| NOT              { {tags=$1; str="!"} }
-| COLON            { {tags=$1; str=":"} }
-| COMMA            { {tags=$1; str=","} }
-| QUESTION         { {tags=$1; str="?"} }
-| DOT              { {tags=$1; str="."} }
-| ASSIGN           { {tags=$1; str="="} }
-| SEMICOLON        { {tags=$1; str=";"} }
-| AT               { {tags=$1; str="@"} }
+| MASK             { {tags=($1, []); str="&&&"} }
+| RANGE            { {tags=($1, []); str=".."} }
+| SHL              { {tags=($1, []); str="<<"} }
+| AND              { {tags=($1, []); str="&&"} }
+| OR               { {tags=($1, []); str="||"} }
+| EQ               { {tags=($1, []); str="=="} }
+| NE               { {tags=($1, []); str="!="} }
+| GE               { {tags=($1, []); str=">="} }
+| LE               { {tags=($1, []); str="<="} }
+| PLUSPLUS         { {tags=($1, []); str="++"} }
+| PLUS             { {tags=($1, []); str="+"} }
+| PLUS_SAT         { {tags=($1, []); str="|+|"} }
+| MINUS            { {tags=($1, []); str="-"} }
+| MINUS_SAT        { {tags=($1, []); str="|-|"} }
+| MUL              { {tags=($1, []); str="*"} }
+| DIV              { {tags=($1, []); str="/"} }
+| MOD              { {tags=($1, []); str="%"} }
+| BIT_OR           { {tags=($1, []); str="|"} }
+| BIT_AND          { {tags=($1, []); str="&"} }
+| BIT_XOR          { {tags=($1, []); str="^"} }
+| COMPLEMENT       { {tags=($1, []); str="~"} }
+| L_BRACKET        { {tags=($1, []); str="["} }
+| R_BRACKET        { {tags=($1, []); str="]"} }
+| L_BRACE          { {tags=($1, []); str="{"} }
+| R_BRACE          { {tags=($1, []); str="}"} }
+| L_ANGLE          { {tags=($1, []); str="<"} }
+| R_ANGLE          { {tags=($1, []); str=">"} }
+| NOT              { {tags=($1, []); str="!"} }
+| COLON            { {tags=($1, []); str=":"} }
+| COMMA            { {tags=($1, []); str=","} }
+| QUESTION         { {tags=($1, []); str="?"} }
+| DOT              { {tags=($1, []); str="."} }
+| ASSIGN           { {tags=($1, []); str="="} }
+| SEMICOLON        { {tags=($1, []); str=";"} }
+| AT               { {tags=($1, []); str="@"} }
 ;
 
 parameterList:
@@ -419,7 +420,7 @@ parameter:
         match direction with
         | None -> info typ
         | Some dir -> info dir in
-      (Info.merge info1 variable.tags,
+      (Info.merge info1 (fst variable.tags),
        Parameter.{ annotations; direction; typ; variable; opt_value = None }) }
 | annotations = optAnnotations direction = direction typ = typeRef variable = name
    ASSIGN value = expression
@@ -427,7 +428,7 @@ parameter:
         match direction with
         | None -> info typ
         | Some dir -> info dir in
-      (Info.merge info1 variable.tags,
+      (Info.merge info1 (fst variable.tags),
        Parameter.{ annotations; direction; typ; variable; opt_value = Some value }) }
 ;
 
@@ -542,7 +543,7 @@ parserBlockStatement:
 transitionStatement:
 | (* empty *)
   { let info = Info.M "Compiler-generated reject transition" in
-    (info, Parser.Direct { next = {tags=info; str="reject"} }) }
+    (info, Parser.Direct { next = {tags=(info, []); str="reject"} }) }
 
 | info1 = TRANSITION transition = stateExpression
     { (Info.merge info1 (info transition),
@@ -551,7 +552,7 @@ transitionStatement:
 
 stateExpression:
 | next = name info2 = SEMICOLON
-    { (Info.merge next.tags info2,
+    { (Info.merge (fst next.tags) info2,
        Parser.Direct { next = next }) }
 | select = selectExpression
     { select }
@@ -701,7 +702,7 @@ methodPrototype:
 | annotations = optAnnotations
   name = name (* NAME TYPENAME *)
     L_PAREN params = parameterList R_PAREN info2 = SEMICOLON
-    { (Info.merge name.tags info2,
+    { (Info.merge (fst name.tags) info2,
       MethodPrototype.Constructor { annotations; name; params }) }
 ;
 
@@ -762,26 +763,26 @@ baseType:
 | info = ERROR
     { (info, Type.Error) }
 | info = BIT
-    { let width = (info, Expression.Int ({ tags = info;
+    { let width = (info, Expression.Int ({ tags = (info, []);
                                            value = Bigint.of_int 1;
                                            width_signed = None })) in
       (info, Type.BitType width) }
 | info1 = BIT L_ANGLE value = INTEGER info_r = r_angle
     { let value_int = fst value in 
-      let value_info = value_int.tags in
+      let value_info = fst value_int.tags in
       let width = (value_info, Expression.Int value_int) in
       let info = Info.merge info1 info_r in
       (info, Type.BitType width) }
 | info1 = INT L_ANGLE value = INTEGER info_r = r_angle
      { let value_int = fst value in 
-       let value_info = value_int.tags in 
+       let value_info = fst value_int.tags in 
        let width = (value_info, Expression.Int value_int) in
        let info = Info.merge info1 info_r in
       (info, Type.IntType width) }
 
 | info1 = VARBIT L_ANGLE value = INTEGER info_r = r_angle
      { let value_int = fst value in 
-       let value_info = value_int.tags in
+       let value_info = fst value_int.tags in
        let max_width = (value_info, Expression.Int value_int) in
        let info = Info.merge info1 info_r in
       (info, Type.VarBit max_width) }
@@ -806,7 +807,7 @@ typeOrVoid:
 | info = VOID
   { (info, Type.Void) }
 | name = varName
-  { (name.tags, Type.TypeName (BareName name)) }    (* may be a type variable *)
+  { (fst name.tags, Type.TypeName (BareName name)) }    (* may be a type variable *)
 ;
 
 optTypeParameters:
@@ -830,7 +831,7 @@ realTypeArg:
 typeArg:
 | info = DONTCARE { (info, Type.DontCare) }
 | typ = typeRef { typ }
-| name = nonTypeName { (name.tags, Type.TypeName (BareName name)) }
+| name = nonTypeName { (fst name.tags, Type.TypeName (BareName name)) }
 | info = VOID { (info, Type.Void) }
 ;
 
@@ -903,7 +904,7 @@ enumDeclaration:
 | annotations = optAnnotations info1 = ENUM info2 = BIT L_ANGLE value = INTEGER r_angle
     name = name L_BRACE members = specifiedIdentifierList info4 = R_BRACE
    { let value_int = fst value in 
-     let value_info = value_int.tags in 
+     let value_info = fst value_int.tags in 
      let width = (value_info, Expression.Int value_int) in
      let typ = (Info.merge info2 info4, Type.BitType width) in
      (Info.merge info1 info4,
@@ -1050,7 +1051,7 @@ switchCase:
 
 switchLabel:
 | name = name
-  { (name.tags, Statement.Name name) }
+  { (fst name.tags, Statement.Name name) }
 | info = DEFAULT
   { (info, Statement.Default) }
 ;
@@ -1093,7 +1094,7 @@ tableProperty:
        Table.Custom { annotations = annos; const = true; name = n; value = v }) }
 | annos = optAnnotations
     n = nonTableKwName ASSIGN v = initialValue info2 = SEMICOLON
-    { (Info.merge n.tags info2,
+    { (Info.merge (fst n.tags) info2,
        Table.Custom { annotations = annos; const = false; name = n; value = v }) }
 ;
 
@@ -1126,18 +1127,18 @@ entry:
 
 actionRef:
 |  annotations = optAnnotations name = name
-     { (name.tags, { annotations; name = BareName name; args = [] }) }
+     { (fst name.tags, { annotations; name = BareName name; args = [] }) }
 |  annotations = optAnnotations name = name L_PAREN args = argumentList
      info2 = R_PAREN
-     { (Info.merge name.tags info2,
+     { (Info.merge (fst name.tags) info2,
         { annotations; name = BareName name; args }) }
 |  annotations = optAnnotations
    info1 = dotPrefix go_toplevel name = nonTypeName go_local
-     { (name.tags, { annotations; name = QualifiedName ([], name); args = [] }) }
+     { (fst name.tags, { annotations; name = QualifiedName ([], name); args = [] }) }
 |  annotations = optAnnotations 
    info1 = dotPrefix go_toplevel name = nonTypeName go_local
    L_PAREN args = argumentList info2 = R_PAREN
-     { (Info.merge name.tags info2,
+     { (Info.merge (fst name.tags) info2,
         { annotations; name = QualifiedName ([], name); args }) }
 ;
 
@@ -1193,7 +1194,7 @@ argument:
 | value = expression
     { (info value, Argument.Expression { value }) }
 | key = name ASSIGN value = expression
-    { (Info.merge key.tags (info value),
+    { (Info.merge (fst key.tags) (info value),
        Argument.KeyValue { key; value }) }
 | info = DONTCARE
     { (info, Argument.Missing) }
@@ -1201,7 +1202,7 @@ argument:
 
 %inline kvPair:
 | key = name ASSIGN value = expression 
-  { (Info.merge key.tags (info value),
+  { (Info.merge (fst key.tags) (info value),
      KeyValue.{ key; value }) }
 
 kvList:
@@ -1220,16 +1221,16 @@ member:
 
 prefixedNonTypeName:
 | name = nonTypeName
-  { (name.tags, Expression.Name (BareName name)) }
+  { (fst name.tags, Expression.Name (BareName name)) }
 | info1 = dotPrefix go_toplevel name = nonTypeName go_local
-  { (Info.merge info1 name.tags,
+  { (Info.merge info1 (fst name.tags),
      Expression.Name (QualifiedName ([], name))) }
 ;
 
 lvalue:
 | expr = prefixedNonTypeName { expr }
 | expr = lvalue DOT name = member
-  { (Info.merge (info expr) name.tags,
+  { (Info.merge (info expr) (fst name.tags),
      Expression.ExpressionMember { expr; name }) }
 | array = lvalue L_BRACKET index = expression info2 = R_BRACKET
     { (Info.merge (info array) info2,
@@ -1243,18 +1244,18 @@ lvalue:
 expression:
 | value = INTEGER
   { let value_int = fst value in 
-    let info = value_int.tags in 
+    let info = fst value_int.tags in 
     (info, Expression.Int value_int) }
 | info1 = TRUE
   { (info1, Expression.True) }
 | info1 = FALSE
   { (info1, Expression.False) }
 | value = STRING_LITERAL
-  { (value.tags, Expression.String value) }
+  { (fst value.tags, Expression.String value) }
 | name = nonTypeName
-  { (name.tags, Expression.Name (BareName name)) }
+  { (fst name.tags, Expression.Name (BareName name)) }
 | info1 = dotPrefix go_toplevel name = nonTypeName go_local
-  { (Info.merge info1 name.tags, Expression.Name (QualifiedName ([], name))) }
+  { (Info.merge info1 (fst name.tags), Expression.Name (QualifiedName ([], name))) }
 | array = expression L_BRACKET index = expression info2 = R_BRACKET
   { (Info.merge (info array) info2,
      Expression.ArrayAccess { array; index }) }
@@ -1286,13 +1287,13 @@ expression:
   { (Info.merge info1 (info expr),
      Expression.Cast { typ; expr }) }
 | typ = prefixedTypeName DOT name = member
-  { (name.tags,
+  { (fst name.tags,
      Expression.TypeMember { typ; name }) }
 | info1 = ERROR DOT name = member
-  { (Info.merge info1 name.tags,
+  { (Info.merge info1 (fst name.tags),
      Expression.ErrorMember name) }
 | expr = expression DOT name = member
-  { (Info.merge (info expr) name.tags,
+  { (Info.merge (info expr) (fst name.tags),
      Expression.ExpressionMember { expr; name }) }
 | arg1 = expression op = binop arg2 = expression
   { (Info.merge (Types.info arg1) (Types.info arg2),

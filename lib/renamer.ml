@@ -5,7 +5,6 @@ type state = { counter : int;
 
 type t = state ref
 
-
 let create () = ref { counter = 0; seen = [] }
 
 let seen_name st name =
@@ -36,6 +35,6 @@ let freshen_name st name =
   observe_name st new_name;
   new_name
 
-let freshen_p4string st (s: P4string.t): P4string.t =
+let freshen_p4string st (s: Types.P4string.t): Types.P4string.t =
   {s with str = freshen_name st s.str}
 

@@ -15,7 +15,7 @@
 
 open Core_kernel
 open Util
-open P4string
+open Types.P4string
 
 type t = (bool StringMap.t) list [@@deriving sexp]
 
