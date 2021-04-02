@@ -21,12 +21,12 @@ module Corize (T : Target) : Target = struct
     f,
     List.Assoc.find_exn init_fs f ~equal:P4string.eq
 
-  let nbytes_of_hdr (fs : (P4string.t * coq_ValueBase) list) : Bigint.t =
+  let nbytes_of_hdr (fs : (P4string.t * coq_ValueBase) list) : int =
     fs
     |> List.map ~f:snd
     |> List.map ~f:width_of_val
-    |> List.fold ~init:Bigint.zero ~f:Bigint.(+)
-    |> fun x -> Bigint.(x / of_int 8)
+    |> List.fold ~init:0 ~f:(+)
+    |> fun x -> x / 8
 
   let bytes_of_packet (pkt : buf) (nbytes : Bigint.t) : buf * Bigint.t * signal =
     let (c1,c2), signal =
@@ -131,7 +131,7 @@ module Corize (T : Target) : Target = struct
     let init_fs = match init_v with
       | ValBase (ValBaseHeader (fields, is_valid)) -> fields
       | _ -> failwith "extract expects header" in
-    let nbytes = Bigint.(nbytes_of_hdr init_fs + of_int w / of_int 8) in
+    let nbytes = Bigint.of_int (nbytes_of_hdr init_fs + w / 8) in
     let (pkt', extraction, s) = bytes_of_packet pkt nbytes in
     let st' = State.set_packet {obj with main = pkt'} st in
     match s with
@@ -157,7 +157,7 @@ module Corize (T : Target) : Target = struct
               (if is_fixed
                then P4string.dummy "hdr"
                else P4string.dummy "variableSizeHeader")
-              loc.str env
+              loc env
           in
           env', st''', SContinue, ValBase ValBaseNull
         end
@@ -188,24 +188,22 @@ module Corize (T : Target) : Target = struct
       begin match v1 with
         | ValBase ValBaseNull ->
           let targ = List.nth targs 0 |> Option.value_exn in
-          eval_advance env st targs [(pkt, t); (ValBase (ValBaseBit (0, width_of_typ env targ)), t)]
+          eval_advance env st targs [(pkt, t); (ValBase (ValBaseBit (0, Bigint.of_int (width_of_typ env targ))), t)]
         | _ -> eval_extract' env st t pkt v1 0 true
       end
     | [(pkt,_); (v1,t); (ValBase v2, _)] ->
-      let w = match Checker.bigint_of_value v2 with
-        | Some v -> Bigint.to_int_exn v
-        | _ -> failwith "expected number"
-      in
+      let w = v2 |> Checker.bigint_of_value_base_exn |> Bigint.to_int_exn in
       eval_extract' env st t pkt v1 w false
     | _ -> failwith "wrong number of args for extract"
 
   let rec val_of_bigint (env : env) (t : coq_P4Type) (n : Bigint.t) : coq_ValueBase =
     let w = width_of_typ env t in
     let f (w,n) t =
+      let w' = Bigint.of_int w in
       let rmax = width_of_typ env t in
-      let v =
-        val_of_bigint env t (bitstring_slice n Bigint.(w - one) Bigint.(w-rmax)) in
-      Bigint.(w - rmax, bitstring_slice n (w - rmax) zero), v in
+      let rmax' = Bigint.of_int rmax in
+      let v = val_of_bigint env t (bitstring_slice n Bigint.(w' - one) Bigint.(w'-rmax')) in
+      (w - rmax, Bigint.(bitstring_slice n (w' - rmax') zero)), v in
     let fieldvals_of_recordtype (rt : coq_FieldType list) : (P4string.t * coq_ValueBase) list =
       let names = List.map ~f:(fun (MkFieldType (name, _)) -> name) rt in
       let types = List.map ~f:(fun (MkFieldType (_, typ)) -> typ) rt in
@@ -245,10 +243,9 @@ module Corize (T : Target) : Target = struct
     let w = width_of_typ env t in
     let obj = State.get_packet st in
     let pkt = obj.main in
-    let eight = Bigint.((one + one) * (one + one) * (one + one)) in
     try
-      let (pkt_hd, _) = Cstruct.split ~start:0 pkt Bigint.(to_int_exn (w/eight)) in
-      let (_, n, s) = bytes_of_packet pkt_hd Bigint.(w/eight) in
+      let (pkt_hd, _) = Cstruct.split ~start:0 pkt (w/8) in
+      let (_, n, s) = bytes_of_packet pkt_hd (Bigint.of_int (w/8)) in
       begin match s with 
       | SContinue -> 
         let v = val_of_bigint env t n in
@@ -379,9 +376,9 @@ module Corize (T : Target) : Target = struct
       ("emit", eval_emit);
       ("verify", eval_verify)]
 
-  let write_header_field : T.obj Target.writer = T.write_header_field
+  let write_header_field : Target.writer = T.write_header_field
 
-  let read_header_field : T.obj Target.reader = T.read_header_field
+  let read_header_field : Target.reader = T.read_header_field
 
   let eval_extern name =
     match name with

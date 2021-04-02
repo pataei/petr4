@@ -4,7 +4,7 @@ open Core_kernel
 
 type t = {
     (* maps variables to their locations in memory (state) *)
-    vs : string Env.t;
+    vs : Prog.loc Env.t;
     (* map variables to their types; only needed in a few cases *)
     typ : coq_P4Type Env.t;
     (* dynamically maintain the control-plane namespace *)
@@ -52,7 +52,7 @@ let insert_typ name binding e =
 let insert_typ_bare name =
   insert_typ (BareName name)
 
-let insert_vals (bindings: (P4name.t * string) list) (e: t) : t =
+let insert_vals (bindings: (P4name.t * P4string.t) list) (e: t) : t =
   List.fold_left bindings ~init:e ~f:(fun a (b,c) -> insert_val b c a)
 
 let fix_bindings (bindings: (P4string.t * 'a) list) : (P4name.t * 'a) list =

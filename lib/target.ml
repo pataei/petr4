@@ -4,7 +4,6 @@ open Prog
 open Env
 open Bitstring
 open Core_kernel
-open Util
 module Info = I
 let (=) = Stdlib.(=)
 let (<>) = Stdlib.(<>)
@@ -21,8 +20,8 @@ type 'st apply =
 module State = struct
 
   type 'a t = {
-    externs : (string * 'a) list;
-    heap : (string * coq_Value) list;
+    externs : (P4string.t * 'a) list;
+    heap : (P4string.t * coq_Value) list;
     packet : pkt;
   }
 
@@ -32,17 +31,17 @@ module State = struct
     packet = {emitted = Cstruct.empty; main = Cstruct.empty; in_size = 0; }
   }
 
-  let packet_location = "__PACKET__"
+  let packet_location = P4string.dummy "__PACKET__"
 
   let counter = ref 0
 
   let fresh_loc = fun () ->
     counter := !counter + 1;
-    "__fresh_loc__" ^ (string_of_int (!counter)) ^ "__fresh_loc__"
+    "__fresh_loc__" ^ (string_of_int (!counter)) ^ "__fresh_loc__" |> P4string.dummy
 
   let reset_state st = counter := 0; { st with 
     packet = {emitted = Cstruct.empty; main = Cstruct.empty; in_size = 0; };
-    heap = List.filter st.heap ~f:(fun (x,_) -> String.is_prefix x ~prefix:"__fresh_loc__");
+    heap = List.filter st.heap ~f:(fun (x,_) -> String.is_prefix x.str ~prefix:"__fresh_loc__");
   }
 
   let get_packet st = st.packet
@@ -53,16 +52,16 @@ module State = struct
     st with externs = (loc,v) :: st.externs }
   
   let find_extern loc st =
-    let x = List.Assoc.find_exn st.externs loc ~equal:String.equal in
+    let x = List.Assoc.find_exn st.externs loc ~equal:P4string.eq in
     x
 
   let insert_heap loc v st = { st with heap = (loc,v) :: st.heap }
 
   let find_heap loc st =
-    List.Assoc.find_exn st.heap loc ~equal:String.equal
+    List.Assoc.find_exn st.heap loc ~equal:P4string.eq
 
   let is_initialized loc st =
-    List.exists st.externs ~f:(fun (x,_) -> String.equal x loc)
+    List.exists st.externs ~f:(fun (x,_) -> P4string.eq x loc)
 
 end
 
@@ -70,21 +69,21 @@ type writer = bool -> (P4string.t * coq_ValueBase) list -> P4string.t -> coq_Val
 
 type reader = bool -> (P4string.t * coq_ValueBase) list -> P4string.t -> coq_ValueBase
 
-let rec width_of_typ (env : env) (t : coq_P4Type) : Bigint.t =
+let rec width_of_typ (env : env) (t : coq_P4Type) : int =
   match t with
-  | TypBool -> Bigint.one
-  | TypInt width | TypBit width -> Bigint.of_int width
-  | TypArray (typ, size) -> Bigint.(width_of_typ env typ * of_int size)
+  | TypBool -> 1
+  | TypInt width | TypBit width -> width
+  | TypArray (typ, size) -> width_of_typ env typ * size
   | TypList types
   | TypTuple types ->
     types
     |> List.map ~f:(width_of_typ env)
-    |> List.fold ~init:Bigint.zero ~f:Bigint.(+)
+    |> List.fold ~init:0 ~f:(+)
   | TypRecord fields | TypHeader fields | TypStruct fields ->
     fields
     |> List.map ~f:(fun (MkFieldType (name, typ)) -> typ)
     |> List.map ~f:(width_of_typ env)
-    |> List.fold ~init:Bigint.zero ~f:Bigint.(+)
+    |> List.fold ~init:0 ~f:(+)
   | TypEnum (_, Some t, _) -> width_of_typ env t
   | TypTypeName n -> width_of_typ env (Eval_env.find_typ n env)
   | TypNewType (name, typ) -> width_of_typ env typ

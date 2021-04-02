@@ -60,12 +60,12 @@ module type Target = sig
 
 end
 
-val width_of_typ : env -> coq_P4Type -> Bigint.t
+val width_of_typ : env -> coq_P4Type -> int
 
 val init_val_of_typ : env -> coq_P4Type -> coq_Value
 
-val width_of_val : coq_ValueBase -> Bigint.t
+val width_of_val : coq_ValueBase -> int
 
 val value_of_lvalue : reader -> env -> 'a State.t -> coq_ValueLvalue -> signal * coq_Value
 
-val assign_lvalue : reader -> writer -> 'a State.t -> env -> coq_ValueLvalue -> coq_Value -> 'a State.t * signal
+val assign_lvalue : reader -> writer -> 'a State.t -> env -> coq_ValueLvalue -> coq_ValueBase -> 'a State.t * signal
