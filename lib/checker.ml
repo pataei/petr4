@@ -13,6 +13,8 @@ module Info = Petr4Info
 let (=) = Stdlib.(=)
 let (<>) = Stdlib.(<>)
 
+exception ValNotInt
+
 let make_assert expected unwrap = fun info typ ->
   match unwrap typ with
   | Some v -> v
@@ -291,7 +293,7 @@ and compile_time_eval_exprs env exprs : Prog.coq_ValueBase list option =
   let options = List.map ~f:(compile_time_eval_expr env) exprs in
   Util.list_option_flip options
 
-and bigint_of_value (v: Prog.coq_ValueBase) =
+and bigint_of_value_base (v: Prog.coq_ValueBase) =
   match v with
   | ValBaseInt (_, v)
   | ValBaseBit (_, v)
@@ -299,10 +301,21 @@ and bigint_of_value (v: Prog.coq_ValueBase) =
     Some v
   | _ -> None
 
+and bigint_of_value (v: Prog.coq_Value) =
+  match v with
+  | ValBase v -> bigint_of_value_base v
+  | _ -> None
+
+and bigint_of_value_base_exn (v: Prog.coq_ValueBase) =
+  opt_to_exn ValNotInt (bigint_of_value_base v)
+
+and bigint_of_value_exn (v: Prog.coq_Value) =
+  opt_to_exn ValNotInt (bigint_of_value v)
+
 and compile_time_eval_bigint env expr: Bigint.t =
   match
     compile_time_eval_expr env expr
-    |> option_map bigint_of_value
+    |> option_map bigint_of_value_base
     |> option_collapse
   with
   | Some bigint -> bigint
@@ -1681,7 +1694,7 @@ and is_positive_numeric env (e: Prog.coq_Expression) : bool =
       | None ->
         true (* XXX: bit<> values can be zero... *)
       | Some value ->
-        match bigint_of_value value with
+        match bigint_of_value_base value with
         | Some e_value -> Bigint.(e_value > zero)
         | None ->
           failwith "bit<> evaluated to non numerical value?"

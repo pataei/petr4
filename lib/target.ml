@@ -66,9 +66,9 @@ module State = struct
 
 end
 
-type 'a writer = bool -> (P4string.t * 'a) list -> P4string.t -> 'a -> coq_Value
+type writer = bool -> (P4string.t * coq_ValueBase) list -> P4string.t -> coq_ValueBase -> coq_Value
 
-type 'a reader = bool -> (P4string.t * 'a) list -> P4string.t -> 'a
+type reader = bool -> (P4string.t * coq_ValueBase) list -> P4string.t -> coq_ValueBase
 
 let rec width_of_typ (env : env) (t : coq_P4Type) : Bigint.t =
   match t with
@@ -229,7 +229,7 @@ let rec width_of_val (v: coq_ValueBase) =
   | ValBaseUnion _ -> failwith "width of header union unimplemented"
   | _ -> raise_s [%message "width of type unimplemented" ~v:(v: coq_ValueBase)]
 
-let rec value_of_lvalue (reader : 'a reader) (env : env) (st : 'a State.t)
+let rec value_of_lvalue (reader : reader) (env : env) (st : 'a State.t)
     (lv : coq_ValueLvalue) : signal * coq_Value =
   let (MkValueLvalue (lv, _)) = lv in
   match lv with
@@ -238,7 +238,7 @@ let rec value_of_lvalue (reader : 'a reader) (env : env) (st : 'a State.t)
   | ValLeftBitAccess (lv, hi, lo) -> value_of_lbit reader st env lv hi lo
   | ValLeftArrayAccess (lv, idx) -> value_of_larray reader st env lv idx
 
-and value_of_lmember (reader : 'a reader) (st : 'a State.t) (env : env) (lv : coq_ValueLvalue)
+and value_of_lmember (reader : reader) (st : 'a State.t) (env : env) (lv : coq_ValueLvalue)
     (n : P4string.t) : signal * coq_Value =
   let (s,v) = value_of_lvalue reader env st lv in
   let v' = match v with
@@ -252,18 +252,19 @@ and value_of_lmember (reader : 'a reader) (st : 'a State.t) (env : env) (lv : co
   | SReject _ -> (s, ValBase ValBaseNull)
   | _ -> failwith "unreachable"
 
-and value_of_lbit (reader : 'a reader) (st : 'a State.t) (env : env) (lv : coq_ValueLvalue)
+and value_of_lbit (reader : reader) (st : 'a State.t) (env : env) (lv : coq_ValueLvalue)
     (hi : int) (lo : int) : signal * coq_Value =
   let (signal, n) = value_of_lvalue reader env st lv in
-  let n' = n |> Checker.bigint_of_value in
-  match s with 
+  let n' = n |> Checker.bigint_of_value_exn in
+  match signal with 
   | SContinue ->
     let width = hi - lo + 1 in
     let string = bitstring_slice n' (Bigint.of_int hi) (Bigint.of_int lo) in
-    s, ValBase (ValBaseBit (width, string))
-  | SReject _ | SReturn _ | SExit -> s, ValBase ValBaseNull
+    signal, ValBase (ValBaseBit (width, string))
+  | SReject _ | SReturn _ | SExit ->
+     signal, ValBase ValBaseNull
 
-and value_of_larray (reader : 'a reader) (st : 'a State.t) (env : env) (lv : coq_ValueLvalue)
+and value_of_larray (reader : reader) (st : 'a State.t) (env : env) (lv : coq_ValueLvalue)
     (idx : int) : signal * coq_Value =
   let (s,v) = value_of_lvalue reader env st lv in
   match s with
@@ -286,43 +287,47 @@ and value_of_stack_mem_lvalue (st : 'a State.t) (name : P4string.t) (ls : coq_Va
   | "next" -> List.nth_exn ls (next % size)
   | _ -> failwith "not an lcoq_Value"
 
-let rec assign_lvalue (reader : 'a reader) (writer : 'a writer) (st : 'a State.t) 
+let rec assign_lvalue (reader : reader) (writer : writer) (st : 'a State.t) 
     (env : env) (lhs : coq_ValueLvalue) (rhs : coq_ValueBase) : 'a State.t * signal =
-  match lhs with
-  | LName {name} ->
-    let l = EvalEnv.find_val name env in
-    State.insert_heap l rhs st, SContinue
-  | LMember{expr=lv;name=mname;} ->
-    let signal1, record = coq_Value_of_lcoq_Value reader env st lv in
+  let MkValueLvalue (lval, _) = lhs in
+  match lval with
+  | ValLeftName name ->
+    let l = Eval_env.find_val name env in
+    State.insert_heap l (ValBase rhs) st, SContinue
+  | ValLeftMember (lv, mname) ->
+    let signal1, record = value_of_lvalue reader env st lv in
     let rhs', signal2 = update_member writer record mname rhs in
-    let inc_next = String.equal mname "next" in
+    let inc_next = P4string.eq mname (P4string.dummy "next") in
     let rhs' = match rhs' with
-      | VStack{headers; size; next} -> Bigint.(VStack {headers; size; next = next + (if inc_next then one else zero)})
-      | _ -> rhs' in
+      | ValBase (ValBaseStack (headers, size, next)) ->
+         ValBaseStack (headers, size, next + (if inc_next then 1 else 0))
+      | ValBase rhs' -> rhs'
+      | _ -> failwith "bad rhs"
+    in
     begin match signal1, signal2 with
       | SContinue, SContinue ->
-        assign_lcoq_Value reader writer st env lv rhs'
+        assign_lvalue reader writer st env lv rhs'
       | SContinue, _ -> st, signal2
       | _, _ -> st, signal1
     end
-  | LBitAccess{expr=lv;msb;lsb;} ->
-    let signal, bits = coq_Value_of_lcoq_Value reader env st lv in
+  | ValLeftBitAccess (lv, msb, lsb) ->
+    let signal, bits = value_of_lvalue reader env st lv in
     begin match signal with
       | SContinue -> 
-        assign_lcoq_Value reader writer st env lv (update_slice bits msb lsb rhs)
+        assign_lvalue reader writer st env lv (update_slice bits msb lsb rhs)
       | _ -> st, signal
     end
-  | LArrayAccess{expr=lv;idx;} ->
-    let signal1, arr = coq_Value_of_lcoq_Value reader env st lv in
+  | ValLeftArrayAccess (lv, idx) ->
+    let signal1, arr = value_of_lvalue reader env st lv in
     let rhs', signal2 = update_idx arr idx rhs in
-    begin match signal1, signal2 with
-      | SContinue, SContinue -> 
-        assign_lcoq_Value reader writer st env lv rhs'
-      | SContinue, _ -> st, signal2
-      | _, _ -> st, signal1  
+    begin match signal1, signal2, rhs' with
+      | SContinue, SContinue, ValBase rhs' -> 
+        assign_lvalue reader writer st env lv rhs'
+      | SContinue, _, _ -> st, signal2
+      | _, _, _ -> st, signal1  
     end
 
-and update_member (writer : 'a writer) (value : coq_Value) (fname : P4string.t)
+and update_member (writer : writer) (value : coq_Value) (fname : P4string.t)
     (fvalue : coq_ValueBase) : coq_Value * signal =
   match value with
   | ValBase (ValBaseStruct fields) ->
@@ -342,60 +347,64 @@ and update_member (writer : 'a writer) (value : coq_Value) (fname : P4string.t)
   | _ -> failwith "member access undefined"
 
 and update_union_member (fields : (P4string.t * coq_ValueBase) list)
-    (member_name : P4string.t) (new_value : coq_ValueBase) : coq_ValueBase * signal =
-  let new_fields, new_value_valid = assert_header new_value in
+    (member_name : P4string.t) (new_value : coq_ValueBase) : coq_Value * signal =
+  let new_fields, new_value_valid =
+    match new_value with
+    | ValBaseHeader (fields, valid) -> fields, valid
+    | _ -> failwith "not a header"
+  in
   let set_validity value validity =
-    let value_fields, _ = Poulet4.Unpack.unpack_header value in
-    ValBaseHeader (value_fields, validity)
+    match value with
+    | ValBaseHeader (fields, _) -> ValBaseHeader (fields, validity)
+    | _ -> failwith "not a header"
   in
   let update_field (name, value) =
-    if new_coq_Value_valid
+    if new_value_valid
     then if name = member_name
-         then name, new_coq_Value
-         else name, set_validity coq_Value false
-    else name, set_validity coq_Value false
+         then name, new_value
+         else name, set_validity value false
+    else name, set_validity value false
   in
-  ValBaseUnion {fields = List.map ~f:update_field fields}, SContinue
+  ValBase (ValBaseUnion (List.map ~f:update_field fields)), SContinue
 
-and update_field (fields : (string * coq_Value) list) (field_name : string)
-    (field_value : coq_Value) : coq_Value =
+and update_field (fields : (P4string.t * coq_ValueBase) list) (field_name : P4string.t)
+    (field_value : coq_ValueBase) : coq_Value =
   let update (n, v) =
-    if String.equal n field_name
-    then n, field_coq_Value
+    if P4string.eq n field_name
+    then n, field_value
     else n, v in
-  ValBaseStruct {fields = List.map fields ~f:update}
+  ValBase (ValBaseStruct (List.map fields ~f:update))
 
-and update_nth (l : coq_Value list) (n : Bigint.t)
-    (x : coq_Value) : coq_Value list =
-  let n = Bigint.to_int_exn n in
+and update_nth (l : coq_ValueBase list) (n : int)
+    (x : coq_ValueBase) : coq_ValueBase list =
   let xs, ys = List.split_n l n in
   match ys with
   | y :: ys -> xs @ x :: ys
   | [] -> failwith "update_nth: out of bounds"
 
-and update_idx (arr : coq_Value) (idx : Bigint.t)
-    (value : coq_Value) : coq_Value * signal =
+and update_idx (arr : coq_Value) (idx : int) 
+    (value : coq_ValueBase) : coq_Value * signal =
   match arr with
-  | VStack{headers; size; next} ->
-     if Bigint.(idx < zero || idx >= size)
-     then VNull, SReject "StackOutOfBounds"
-     else VStack {headers = update_nth headers idx coq_Value; next; size}, SContinue
+  | ValBase (ValBaseStack (headers, size, next)) ->
+     if idx < 0 || idx >= size
+     then ValBase ValBaseNull, SReject (P4string.dummy "StackOutOfBounds")
+     else ValBase (ValBaseStack (update_nth headers idx value, next, size)), SContinue
   | _ -> failwith "BUG: update_idx: expected a stack"
 
 and update_slice bits_val msb lsb rhs_val =
   let open Bigint in
   let width =
     match bits_val with
-    | VBit { w; _ } -> w
+    | ValBase (ValBaseBit (w, _)) -> w
     | _ -> failwith "BUG:expected bit<> type"
   in
-  let bits = Checker.bigint_of_value bits_val in
-  let rhs_shifted = bigint_of_val rhs_val lsl to_int_exn lsb in
-  let mask = lnot ((power_of_two (msb + one) - one)
-                   lxor (power_of_two lsb - one))
+  let bits = Checker.bigint_of_value_exn bits_val in
+  let rhs_shifted = Checker.bigint_of_value_base_exn rhs_val lsl lsb in
+  let mask = lnot ((power_of_two (Bigint.of_int msb + one) - one)
+                   lxor (power_of_two (Bigint.of_int lsb) - one))
   in
   let new_bits = (bits land mask) lxor rhs_shifted in
-  VBit { w = width; v = new_bits }
+  ValBaseBit (width, new_bits)
 
 module type Target = sig
 
@@ -405,9 +414,9 @@ module type Target = sig
 
   type extern = state pre_extern
 
-  val write_header_field : obj writer
+  val write_header_field : writer
 
-  val read_header_field : obj reader
+  val read_header_field : reader
 
   val eval_extern : 
     string -> env -> state -> coq_P4Type list -> (coq_Value * coq_P4Type) list ->

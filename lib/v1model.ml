@@ -1,6 +1,5 @@
 open Typed
 open Prog
-open Value
 open Env
 open Target
 open Error
@@ -10,7 +9,7 @@ open Core_kernel
 module Info = I
 module Hash = H
 
-module PreV1Switch : Target = struct
+module PreV1Switch (*: Target*) = struct
 
   let drop_spec = Bigint.of_int 511
 
@@ -25,7 +24,7 @@ module PreV1Switch : Target = struct
     | Meter of unit (* TODO *)
     | DirectMeter of unit (* TODO *)
     | Register of {
-        states: value list;
+        states: coq_ValueBase list;
         size: Bigint.t;
       }
     | ActionProfile of unit (* TODO *)
@@ -41,13 +40,13 @@ module PreV1Switch : Target = struct
   type state = obj State.t
   type extern = state pre_extern
 
-  let read_header_field : obj reader = fun is_valid fields fname ->
-    List.Assoc.find_exn fields fname ~equal:String.equal
+  let read_header_field : coq_ValueBase reader = fun is_valid fields fname ->
+    List.Assoc.find_exn fields fname ~equal:P4string.eq
 
-  let write_header_field : obj writer = fun is_valid fields fname fvalue ->
+  let write_header_field : coq_ValueBase writer = fun is_valid fields fname fvalue ->
     let fs = List.map fields
-      ~f:(fun (n,v) -> if String.equal n fname then n, fvalue else n,v) in
-    VHeader {fields = fs; is_valid; }
+      ~f:(fun (n,v) -> if P4string.eq n fname then n, fvalue else n, v) in
+    ValBase (ValBaseHeader (fs, is_valid))
 
   let assign_lvalue = assign_lvalue read_header_field write_header_field
 

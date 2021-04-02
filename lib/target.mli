@@ -30,9 +30,9 @@ module State : sig
   val is_initialized : loc -> 'a t -> bool
 end
 
-type 'a writer = bool -> (string * coq_Value) list -> string -> coq_Value -> coq_Value
+type writer = bool -> (P4string.t * coq_ValueBase) list -> P4string.t -> coq_ValueBase -> coq_Value
 
-type 'a reader = bool -> (string * coq_Value) list -> string -> coq_Value
+type reader = bool -> (P4string.t * coq_ValueBase) list -> P4string.t -> coq_ValueBase
 
 module type Target = sig
 
@@ -42,9 +42,9 @@ module type Target = sig
 
   type extern = state pre_extern
 
-  val write_header_field : obj writer
+  val write_header_field : writer
 
-  val read_header_field : obj reader
+  val read_header_field : reader
 
   val eval_extern : 
     string -> env -> state -> coq_P4Type list -> (coq_Value * coq_P4Type) list ->
@@ -66,6 +66,6 @@ val init_val_of_typ : env -> coq_P4Type -> coq_Value
 
 val width_of_val : coq_ValueBase -> Bigint.t
 
-val value_of_lvalue : 'a reader -> env -> 'a State.t -> coq_ValueLvalue -> signal * coq_Value
+val value_of_lvalue : reader -> env -> 'a State.t -> coq_ValueLvalue -> signal * coq_Value
 
-val assign_lvalue : 'a reader -> 'a writer -> 'a State.t -> env -> coq_ValueLvalue -> coq_Value -> 'a State.t * signal
+val assign_lvalue : reader -> writer -> 'a State.t -> env -> coq_ValueLvalue -> coq_Value -> 'a State.t * signal
