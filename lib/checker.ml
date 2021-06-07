@@ -119,7 +119,7 @@ let assert_numeric = make_assert "integer"
       | _ -> None
     end
 
-let field_cmp (MkFieldType (name1, _)) (MkFieldType (name2, _)) =
+let field_cmp ((name1, _): coq_FieldType) ((name2, _): coq_FieldType) =
   String.compare name1.str name2.str
 
 let sort_fields = List.sort ~compare:field_cmp
@@ -173,7 +173,7 @@ let rec min_size_in_bits' env (info: Info.t) (hdr_type: coq_P4Type) : int =
     (Obj.magic size) * min_size_in_bits' env info typ
   | _ -> raise_mismatch info "header or header union" hdr_type
 
-and field_width_bits env info (MkFieldType (_, typ): coq_FieldType) : int =
+and field_width_bits env info ((_, typ): coq_FieldType) : int =
   min_size_in_bits' env info typ
 
 and min_size_in_bits env (info: Info.t) (hdr_type: coq_P4Type) : Bigint.t =
@@ -188,7 +188,7 @@ and min_size_in_bytes env info hdr_type =
 and compile_time_eval_expr (env: Checker_env.t) (expr: Prog.coq_Expression) : Prog.coq_ValueBase option =
   let MkExpression (tags, expr, typ, dir) = expr in
   match expr with
-  | ExpName name ->
+  | ExpName (name, _) ->
     begin match Checker_env.find_const_opt name env with
       | Some (ValBase b) -> Some b
       | _ -> None
@@ -363,8 +363,8 @@ and saturate_type (env: Checker_env.t) (typ: coq_P4Type) : coq_P4Type =
   let saturate_types env types =
     List.map ~f:(saturate_type env) types
   in
-  let saturate_field env (MkFieldType (name, typ)) =
-    MkFieldType (name, saturate_type env typ)
+  let saturate_field env (name, typ) =
+    (name, saturate_type env typ)
   in
   let saturate_rec env (fields: coq_FieldType list) : coq_FieldType list =
     List.map ~f:(saturate_field env) fields
@@ -582,7 +582,7 @@ and solve_lists: 'a 'b.
   |> option_map List.rev
 
 and solve_record_type_equality env equiv_vars unknowns (rec1: coq_FieldType list) (rec2: coq_FieldType list) =
-  let solve_fields (MkFieldType (name1, type1), MkFieldType (name2, type2)) =
+  let solve_fields ((name1, type1), (name2, type2)) =
     if P4string.eq name1 name2
     then solve_types env equiv_vars unknowns type1 type2
     else None
@@ -816,7 +816,7 @@ and type_expression (env: Checker_env.t) (ctx: Typed.coq_ExprContext) (exp_info,
       type_int i
     | Name name ->
       let typ, dir = Checker_env.find_type_of name env in
-      ExpName name, typ, dir
+      ExpName (name, Prog.noLocator), typ, dir
     | ArrayAccess { array; index } ->
       type_array_access env ctx array index
     | BitStringAccess { bits; lo; hi } ->
@@ -910,7 +910,7 @@ and cast_expression (env: Checker_env.t) ctx (typ: coq_P4Type) (exp_info, exp: E
         types
       | TypHeader fields
       | TypStruct fields ->
-        List.map ~f:(fun (MkFieldType (_, typ)) -> typ) fields
+        List.map ~f:(fun (_, typ) -> typ) fields
       | TypSet t ->
         get_types t
       | _ -> [typ]
@@ -932,7 +932,7 @@ and cast_expression (env: Checker_env.t) ctx (typ: coq_P4Type) (exp_info, exp: E
       | _ -> failwith "can't cast record"
     in
     let cast_entry (field, entry: coq_FieldType * KeyValue.t) : Prog.coq_KeyValue =
-      let MkFieldType (field_name, field_type) = field in
+      let (field_name, field_type) = field in
       if P4string.neq field_name (snd entry).key
       then failwith "bad names";
       let value_typed: Prog.coq_Expression =
@@ -1132,13 +1132,13 @@ and is_well_formed_type env (typ: coq_P4Type) : bool =
   | TypRecord fields
   | TypHeaderUnion fields
   | TypStruct fields ->
-    let field_ok (MkFieldType (_, field_typ): coq_FieldType) =
+    let field_ok ((_, field_typ): coq_FieldType) =
       is_well_formed_type env field_typ &&
       is_valid_nested_type env typ field_typ
     in
     List.for_all ~f:field_ok fields
   | TypHeader fields ->
-    let field_ok (MkFieldType (_, field_typ): coq_FieldType) =
+    let field_ok ((_, field_typ): coq_FieldType) =
       is_well_formed_type env field_typ &&
       is_valid_nested_type ~in_header:true env typ field_typ
     in
@@ -1261,7 +1261,7 @@ and is_valid_param_type_kind env (kind: coq_FunctionKind) (typ: coq_P4Type) =
 
 and is_valid_nested_type ?(in_header=false) (env: Checker_env.t) (outer_type: coq_P4Type) (inner_type: coq_P4Type) =
   let inner_type = reduce_to_underlying_type env inner_type in
-  let field_ok (MkFieldType (_, typ)) =
+  let field_ok ((_, typ)) =
     is_valid_nested_type ~in_header env inner_type typ
   in
   match reduce_to_underlying_type env outer_type with
@@ -1473,7 +1473,7 @@ and type_record env ctx entries =
   in
   let kv_to_field (kv: Prog.coq_KeyValue) =
     let MkKeyValue (tags, key, value) = kv in
-    MkFieldType (key, type_of_expr value)
+    (key, type_of_expr value)
   in
   let fields = List.map ~f:kv_to_field entries_typed in
   rec_typed, TypRecord fields, Directionless
@@ -1662,7 +1662,7 @@ and type_has_equality_tests env (typ: coq_P4Type) =
   | TypStruct fields
   | TypRecord fields ->
     List.for_all fields
-      ~f:(fun (MkFieldType (_, field_typ)) ->
+      ~f:(fun ((_, field_typ)) ->
           type_has_equality_tests env field_typ)
   | TypNewType (_, typ) ->
     type_has_equality_tests env typ
@@ -1842,7 +1842,7 @@ and cast_ok ?(explicit = false) env original_type new_type =
     type_equality env [] (TypTuple types1) (TypTuple types2)
   | TypList types1, TypHeader rec2
   | TypList types1, TypStruct rec2 ->
-    let types2 = List.map ~f:(fun (MkFieldType (_, typ)) -> typ) rec2 in
+    let types2 = List.map ~f:(fun ((_, typ)) -> typ) rec2 in
     not explicit && type_equality env [] (TypList types2) original_type
   | TypRecord rec1, TypHeader rec2
   | TypRecord rec1, TypStruct rec2 ->
@@ -1875,8 +1875,8 @@ and type_error_member env ctx (name: P4string.t) : Prog.coq_ExpressionPreT * coq
 
 and header_methods typ =
   let fake_fields: coq_FieldType list =
-    [MkFieldType ({tags=(Info.dummy, []); str="isValid"},
-                  TypFunction (MkFunctionType ([], [], FunBuiltin, TypBool)))]
+    [({P4string.tags=(Info.dummy, []); str="isValid"},
+      TypFunction (MkFunctionType ([], [], FunBuiltin, TypBool)))]
   in
   match typ with
   | TypHeader fields -> fake_fields
@@ -1982,11 +1982,11 @@ and type_expression_member env ctx expr name =
     | TypHeaderUnion fields
     | TypStruct fields ->
       let fs = fields @ methods in
-      let matches (MkFieldType (field_name, _) : coq_FieldType) =
+      let matches ((field_name, _) : coq_FieldType) =
         P4string.eq field_name name
       in
       begin match List.find ~f:matches fs with
-        | Some (MkFieldType (_, field_typ)) -> field_typ
+        | Some ((_, field_typ)) -> field_typ
         | None -> type_expression_member_builtin env ctx (info expr) expr_typ name
       end
     | TypSpecializedType (TypExtern extern_name, args) ->
@@ -2118,7 +2118,7 @@ and match_named_args_to_params env call_site_info (params: coq_P4Parameter list)
 and is_lvalue env (expr_typed: Prog.coq_Expression) =
   let MkExpression (_, expr, expr_typ, expr_dir) = expr_typed in
   match expr with
-  | ExpName name ->
+  | ExpName (name, _) ->
     let typ = reduce_type env expr_typ in
     let const = Checker_env.find_const_opt name env in
     begin match expr_dir, typ with
@@ -2350,7 +2350,7 @@ and resolve_function_overload_by ~f env ctx (func: Types.Expression.t) : Prog.co
         |> List.map ~f:fst
         |> List.find ~f:ok
       with
-      | Some typ -> MkExpression ((fst func, []), ExpName name, typ, Directionless)
+      | Some typ -> MkExpression (fst func, ExpName (name, Prog.noLocator), typ, Directionless)
       | _ -> type_expression env ctx func
     end
   | ExpressionMember { expr; name } ->
@@ -2726,9 +2726,9 @@ and stmt_of_decl_stmt (decl: Prog.coq_Declaration) : Prog.coq_Statement =
   let info, (stmt: Prog.coq_StatementPreT) =
     match decl with
     | DeclConstant (info, typ, name, value) ->
-      info, StatConstant (typ, name, value)
+      info, StatConstant (typ, name, value, Prog.noLocator)
     | DeclVariable (info, typ, name, init) ->
-      info, StatVariable (typ, name, init)
+      info, StatVariable (typ, name, init, Prog.noLocator)
     | DeclInstantiation (info, typ, args, name, init) ->
       info, StatInstantiation (typ, args, name, init)
     | _ ->
@@ -3209,7 +3209,7 @@ and expr_eq env (expr1: Prog.coq_Expression) (expr2: Prog.coq_Expression) : bool
   | ExpString s1,
     ExpString s2
     -> P4string.eq s1 s2
-  | ExpName n1, ExpName n2
+  | ExpName (n1, _), ExpName (n2, _)
     -> P4name.name_eq n1 n2
   | ExpArrayAccess (a1, i1),
     ExpArrayAccess (a2, i2)
@@ -3260,7 +3260,7 @@ and type_default_action
   let expr_ctx: Typed.coq_ExprContext = ExprCxTableAction in
   let action_expr_typed = type_expression env expr_ctx action_expr in
   match preexpr_of_expr action_expr_typed with
-  | ExpFunctionCall (MkExpression (_, (ExpName action_name), _, _), [], args) ->
+  | ExpFunctionCall (MkExpression (_, (ExpName (action_name, _)), _, _), [], args) ->
     begin match List.Assoc.find ~equal:P4name.name_eq action_map action_name with
       | None -> failwith "couldn't find default action in action_map"
       | Some (MkTableActionRef (_, MkTablePreActionRef (_, prop_args), _)) ->
@@ -3288,7 +3288,7 @@ and type_default_action
                             type_of_expr action_expr_typed)
         else raise_s [%message "default action's prefix of arguments do not match those of that in table actions property"]
     end
-  | ExpName action_name ->
+  | ExpName (action_name, _) ->
      let acts = List.map ~f:(fun (n, a) -> P4name.name_only n, a) action_map in
      let act = P4name.name_only action_name in
     if not @@ List.Assoc.mem ~equal:(=) acts act
@@ -3446,10 +3446,10 @@ and type_table' env ctx info annotations (name: P4string.t) key_types action_map
       Checker_env.insert_type (BareName action_enum_name)
         action_enum_typ env
     in
-    let hit_field = MkFieldType ({tags=(Info.dummy, []); str="hit"}, TypBool) in
-    let miss_field = MkFieldType ({tags=(Info.dummy, []); str="miss"}, TypBool) in
+    let hit_field = ({P4string.tags=Info.dummy; str="hit"}, TypBool) in
+    let miss_field = ({P4string.tags=Info.dummy; str="miss"}, TypBool) in
     (* How to represent the type of an enum member *)
-    let run_field = MkFieldType ({tags=(Info.dummy, []); str="action_run"}, action_enum_typ) in
+    let run_field = ({P4string.tags=Info.dummy; str="action_run"}, action_enum_typ) in
     let apply_result_typ = TypStruct [hit_field; miss_field; run_field] in
     (* names of table apply results are "apply_result_<<table name>>" *)
     let result_typ_name = {name with str = "apply_result_" ^ name.str} in
@@ -3484,7 +3484,7 @@ and type_field env (field_info, field) =
   let pre_field : Prog.coq_DeclarationField =
     MkDeclarationField ((field_info, field.annotations), typ, field.name) in
   let pre_record_field : coq_FieldType =
-    MkFieldType (field.name, typ) in
+    (field.name, typ) in
   pre_field, pre_record_field
 
 and type_header_union_field env (field_info, field) =

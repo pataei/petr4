@@ -4,7 +4,7 @@ Require Import Coq.NArith.BinNatDef.
 Require Import Coq.ZArith.BinIntDef.
 Require Import Coq.Strings.String.
 
-Require Import Equations.Equations.
+From Equations Require Import Equations.
 
 Require Import Poulet4.Monads.Monad.
 Require Import Poulet4.Monads.Option.
@@ -44,25 +44,25 @@ Section Eval.
   Notation ParserCase := (@ParserCase tags_t).
   Notation ParserTransition := (@ParserTransition tags_t).
 
-  Definition default_value_error (str: string) : ValueBase := 
+  Definition default_value_error (str: string) : ValueBase :=
     ValBaseError {| P4String.tags := tags_dummy; P4String.str := str |}.
-  
+
   Fixpoint default_value_base (A: P4Type) : ValueBase :=
-    match A with 
+    match A with
     | TypBool => ValBaseBool false
     | TypString => ValBaseString {| P4String.tags := tags_dummy; P4String.str := "" |}
     | TypBit w => ValBaseBit w 0
     | TypVoid => ValBaseHeader [] true (* this seems wrong? but also it shows up in our pretty-printed code *)
-    | TypHeader fields => ValBaseHeader (map (fun '(MkFieldType f t) => (f, default_value_base t)) fields) false
+    | TypHeader fields => ValBaseHeader (map (fun (field: P4String * P4Type) => let (f, t) := field in (f, default_value_base t)) fields) false
     | _ => default_value_error "unimplemented type for default_value_base"
     end.
-  
-  
+
+
   Definition default_value (A: P4Type) : Value :=
-    match A with 
-    | TypBool 
-    | TypString 
-    | TypBit _ 
+    match A with
+    | TypBool
+    | TypString
+    | TypBit _
     | TypHeader _ => ValBase (default_value_base A)
     | _ => ValBase (default_value_error "unimplemented type for default_value")
     end.
@@ -70,7 +70,7 @@ Section Eval.
   Fixpoint eval_lvalue (expr: Expression) : env_monad ValueLvalue :=
     let '(MkExpression _ expr' type _) := expr in
     match expr' with
-    | ExpName name => mret (MkValueLvalue (ValLeftName name) type)
+    | ExpName name locr => mret (MkValueLvalue (ValLeftName name locr) type)
     | ExpExpressionMember lexpr name =>
       let* lval := eval_lvalue lexpr in
       mret (MkValueLvalue (ValLeftMember lval name) type)
@@ -344,7 +344,7 @@ Section Eval.
       | TypSet inner =>
         match val with
         | ValBase (ValBaseBit w bits) =>
-          mret (ValBase (ValBaseSet (ValSetSingleton w bits)))
+          mret (ValBase (ValBaseSet (ValSetSingleton (ValBaseBit w bits))))
         (* TODO: Convert other types of values to sets. *)
         | _ => state_fail (SupportError "Cannot cast this value to a set.")
         end
@@ -417,9 +417,9 @@ Section Eval.
       match inner_v with
       | ValObj (ValObjPacket bits) =>
         match inner with
-        | MkExpression _ (ExpName inner_name) inner_typ _ =>
+        | MkExpression _ (ExpName inner_name locr) inner_typ _ =>
           if P4String.eq_const name StringConstants.extract then
-            mret (extract_value_func (MkValueLvalue (ValLeftName inner_name) inner_typ))
+            mret (extract_value_func (MkValueLvalue (ValLeftName inner_name locr) inner_typ))
           else if P4String.eq_const name StringConstants.lookahead then
             state_fail (SupportError "Packet lookahead is not implemented.")
           else if P4String.eq_const name StringConstants.advance then
@@ -438,7 +438,7 @@ Section Eval.
       end;
     eval_expression_pre (ExpFunctionCall func type_args args) :=
       eval_method_call (eval_expression) func type_args args;
-    eval_expression_pre (ExpName name) :=
+    eval_expression_pre (ExpName name _) :=
       get_name_loc _ name >>= heap_lookup _;
     eval_expression_pre (ExpCast typ expr) :=
       eval_cast (eval_expression) typ expr;
@@ -457,13 +457,26 @@ Section Eval.
       let* lval := eval_lvalue lhs in
       let* val := eval_expression rhs in
       env_update _ lval val;
+    eval_statement_pre (StatConditional cond tru fls) :=
+      let* cv := eval_expression cond in
+      match cv with
+      | (ValBase (ValBaseBool b)) =>
+        if b then
+          eval_statement tru
+        else
+          match fls with
+          | Some fls' => eval_statement fls'
+          | _ => skip
+          end
+      | _ => state_fail (SupportError "Unimplemented statement type")
+      end;
     eval_statement_pre (StatBlock block) :=
       stack_push _ ;;
       eval_block block ;;
       stack_pop _;
-    eval_statement_pre (StatConstant type name init) :=
+    eval_statement_pre (StatConstant type name init _) :=
       env_insert _ name.(P4String.str) (ValBase init);
-    eval_statement_pre (StatVariable type name init) :=
+    eval_statement_pre (StatVariable type name init _) :=
       let* value :=
          match init with
          | None => mret (default_value type)
@@ -493,7 +506,7 @@ Section Eval.
       | MatchExpression e =>
         let* set := unpack_set _ (eval_expression e) in
         match set with
-        | ValSetSingleton width bits =>
+        | ValSetSingleton (ValBaseBit width bits) =>
           match v with
           | ValBase (ValBaseBit width' bits') =>
             if Nat.eqb width width' && Z.eqb bits bits' then

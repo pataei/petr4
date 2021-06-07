@@ -47,14 +47,14 @@ Section Typed.
   | TypArray (typ: P4Type) (size: nat)
   | TypTuple (types: list P4Type)
   | TypList (types: list P4Type)
-  | TypRecord (fields: list FieldType)
+  | TypRecord (fields: P4String.AList tags_t P4Type)
   | TypSet (elt_type: P4Type)
   | TypError
   | TypMatchKind
   | TypVoid
-  | TypHeader (fields: list FieldType)
-  | TypHeaderUnion (fields: list FieldType)
-  | TypStruct (fields: list FieldType)
+  | TypHeader (fields: P4String.AList tags_t P4Type)
+  | TypHeaderUnion (fields: P4String.AList tags_t P4Type)
+  | TypStruct (fields: P4String.AList tags_t P4Type)
   | TypEnum (name: P4String) (typ: option P4Type) (members: list P4String)
   | TypTypeName (name: name)
   | TypNewType (name: P4String) (typ: P4Type)
@@ -69,8 +69,6 @@ Section Typed.
   | TypSpecializedType (base: P4Type) (args: list P4Type)
   | TypConstructor (type_params: list P4String) (wildcard_params: list P4String)
                    (parameters: list P4Parameter) (ret: P4Type)
-  with FieldType :=
-  | MkFieldType (name: P4String) (typ: P4Type)
   with ControlType :=
   | MkControlType (type_params: list P4String) (parameters: list P4Parameter)
   with FunctionType :=

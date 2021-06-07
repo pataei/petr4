@@ -24,18 +24,18 @@ Definition to_digit (n: N): ascii :=
   | _ => "9"
   end.
 
-Fixpoint to_N_aux (time: nat) (n: N) (acc: string): string :=
+Fixpoint N_to_string_aux (time: nat) (n: N) (acc: string): string :=
   let (ndiv10, nmod10) := N.div_eucl n 10 in
   let acc' := String (to_digit nmod10) acc in
   match time with
   | O => acc'
   | S time' => match ndiv10 with
                | 0 => acc'
-               | n' => to_N_aux time' n' acc'
+               | n' => N_to_string_aux time' n' acc'
                end
   end.
 
-Definition N_to_string (n: N): string := to_N_aux (N.to_nat (N.log2 n)) n EmptyString.
+Definition N_to_string (n: N): string := N_to_string_aux (N.to_nat (N.log2 n)) n EmptyString.
 
 Definition add1 (n: N): N := n + 1.
 
@@ -60,7 +60,7 @@ Section Transformer.
     | ExpBool b => (nil, MkExpression tag (ExpBool b) typ dir, nameIdx)
     | ExpInt i => (nil, MkExpression tag (ExpInt i) typ dir, nameIdx)
     | ExpString str => (nil, MkExpression tag (ExpString str) typ dir, nameIdx)
-    | ExpName name => (nil, MkExpression tag (ExpName name) typ dir, nameIdx)
+    | ExpName name loc => (nil, MkExpression tag (ExpName name loc) typ dir, nameIdx)
     | ExpArrayAccess array index =>
       let (l1e1, n1) := transform_exp nameIdx array in
       let (l2e2, n2) := transform_exp n1 index in
@@ -125,8 +125,11 @@ Section Transformer.
       let (l1, e1) := l1e1 in
       let (l2, e2) := l2e2 in
       let (l3, e3) := l3e3 in
+      (* Qinshi: This is incorrect. l2/l3 is only evaluated when the boolean is true/false. *)
       (l1 ++ l2 ++ l3, MkExpression tag (ExpTernary e1 e2 e3) typ dir, n3)
     | ExpFunctionCall func type_args args =>
+      (* There are evaluation order issues here, also in bin_op, List, Record, etc. *)
+      let (l0e0, n0) := transform_exp nameIdx func in
       let (l1e1, n1) :=
           ((fix transform_lopt (idx: N) (l: list (option (@Expression tags_t))):
               (list (P4String * (@Expression tags_t)) *
@@ -141,15 +144,14 @@ Section Transformer.
                 let (l2, e2) := l2e2 in
                 let (l3e3, n3) := transform_lopt n2 rest in
                 let (l3, el3) := l3e3 in (l2 ++ l3, Some e2 :: el3, n3)
-              end) nameIdx args) in
+              end) n0 args) in
+      let (l0, e0) := l0e0 in
       let (l1, e1) := l1e1 in
-      (l1 ++ [(N_to_tempvar n1,
-               MkExpression tag (ExpFunctionCall func type_args e1) typ dir)],
-       MkExpression tag (ExpName (BareName (N_to_tempvar n1))) typ dir, add1 n1)
+      (l0 ++ l1 ++ [(N_to_tempvar n1,
+               MkExpression tag (ExpFunctionCall e0 type_args e1) typ dir)],
+       MkExpression tag (ExpName (BareName (N_to_tempvar n1)) NoLocator) typ dir, add1 n1)
     | ExpNamelessInstantiation typ' args =>
-      ([(N_to_tempvar nameIdx,
-               MkExpression tag (ExpNamelessInstantiation typ' args) typ dir)],
-       MkExpression tag (ExpName (BareName (N_to_tempvar nameIdx))) typ dir, add1 nameIdx)
+      (nil, MkExpression tag (ExpNamelessInstantiation typ' args) typ dir, nameIdx)
     | ExpDontCare => (nil, MkExpression tag ExpDontCare typ dir, nameIdx)
     | ExpMask expr mask =>
       let (l1e1, n1) := transform_exp nameIdx expr in
@@ -181,7 +183,13 @@ Section Transformer.
   Definition transform_Expr (nameIdx: N) (exp: @Expression tags_t):
     (list (P4String * (@Expression tags_t)) * (@Expression tags_t) * N) :=
     match exp with
-    | MkExpression _ (ExpFunctionCall _ _ _) _ _ => (nil, exp, nameIdx)
+    | MkExpression _ (ExpFunctionCall _ _ _) _ _ =>
+      let (l1e1, n1) := transform_exp nameIdx exp in
+      let (l1, e1) := l1e1 in
+      match l1 with
+      | [x] => (nil, exp, nameIdx)
+      | _ => (l1e1, n1)
+      end
     | _ => transform_exp nameIdx exp
     end.
 
@@ -190,11 +198,9 @@ Section Transformer.
     match ne with
     | (name, MkExpression tag expr typ' dir) =>
       match expr with
-      | ExpNamelessInstantiation typ'' e1 =>
-        MkStatement tags (StatInstantiation typ'' e1 name None) typ
       | _ => MkStatement tags
                          (StatVariable typ' name
-                                       (Some (MkExpression tag expr typ' dir))) typ
+                                       (Some (MkExpression tag expr typ' dir)) NoLocator) typ
       end
     end.
 
@@ -245,7 +251,26 @@ Section Transformer.
            (stmt: @StatementPreT tags_t) (typ: StmType):
     (list (@Statement tags_t) * N) :=
     match stmt with
-    | StatMethodCall _ _ _ => ([MkStatement tags stmt typ], nameIdx)
+    | StatMethodCall func type_args args =>
+      let (l0e0, n0) := transform_exp_stmt nameIdx func in
+      let (l1e1, n1) :=
+          ((fix transform_lopt (idx: N) (l: list (option (@Expression tags_t))):
+              (list (@Statement tags_t) *
+               (list (option (@Expression tags_t))) * N) :=
+              match l with
+              | nil => (nil, nil, idx)
+              | None :: rest =>
+                let (l2e2, n2) := transform_lopt idx rest in
+                let (l2, e2) := l2e2 in (l2, None :: e2, n2)
+              | Some exp :: rest =>
+                let (l2e2, n2) := transform_exp_stmt idx exp in
+                let (l2, e2) := l2e2 in
+                let (l3e3, n3) := transform_lopt n2 rest in
+                let (l3, el3) := l3e3 in (l2 ++ l3, Some e2 :: el3, n3)
+              end) n0 args) in
+      let (l0, e0) := l0e0 in
+      let (l1, e1) := l1e1 in
+      (l0 ++ l1 ++ [MkStatement tags (StatMethodCall e0 type_args e1) typ], n1)
     | StatAssignment lhs rhs =>
       let (l1e1, n1) := transform_exp_stmt nameIdx lhs in
       let (l1, e1) := l1e1 in
@@ -288,12 +313,12 @@ Section Transformer.
                 let (rest', n4) := transform_lssc n3 rest in (c1 :: rest', n4)
               end) n1 cases) in
       (l1 ++ [MkStatement tags (StatSwitch e1 caseList) typ], n2)
-    | StatConstant _ _ _ => ([MkStatement tags stmt typ], nameIdx)
-    | StatVariable _ _ None => ([MkStatement tags stmt typ], nameIdx)
-    | StatVariable typ' name (Some expr) =>
+    | StatConstant _ _ _ _ => ([MkStatement tags stmt typ], nameIdx)
+    | StatVariable _ _ None _ => ([MkStatement tags stmt typ], nameIdx)
+    | StatVariable typ' name (Some expr) loc =>
       let (l1e1, n1) := transform_Expr_stmt nameIdx expr in
       let (l1, e1) := l1e1 in
-      (l1 ++ [MkStatement tags (StatVariable typ' name (Some e1)) typ], n1)
+      (l1 ++ [MkStatement tags (StatVariable typ' name (Some e1) loc) typ], n1)
     | StatInstantiation typ' args name init => ([MkStatement tags stmt typ], nameIdx)
     end
   with transform_stmt (nameIdx: N) (stmt: @Statement tags_t):
@@ -323,8 +348,6 @@ Section Transformer.
     match ne with
     | (name, MkExpression tags expr typ dir) =>
       match expr with
-      | ExpNamelessInstantiation typ' args =>
-        DeclInstantiation tags  typ' args name None
       | _ => DeclVariable default_tag typ name (Some (MkExpression tags expr typ dir))
       end
     end.
@@ -493,6 +516,7 @@ Section Transformer.
       ([DeclAction tags name data_params ctrl_params blk], n1)
     | DeclTable tags name key actions entries default_action size
                 custom_properties =>
+      (* Qinshi: Side effect in keys cannot be pulled out into declarations. Keys are evaluated when applying the table. *)
       let (l1e1, n1) := transform_list transform_tblkey nameIdx key in
       let (l1, e1) := l1e1 in
       let (l2e2, n2) := transform_list transform_tar n1 actions in
@@ -522,6 +546,7 @@ Section Transformer.
     | DeclMatchKind _ _ => ([decl], nameIdx)
     | DeclEnum _ _ _ => ([decl], nameIdx)
     | DeclSerializableEnum tags typ name members =>
+      (* Qinshi: I don't think we need to transform here, because these expressions should be constant. *)
       let (l1e1, n1) := transform_list transform_membr nameIdx members in
       let (l1, e1) := l1e1 in (l1 ++ [DeclSerializableEnum tags typ name e1], n1)
     | DeclExternObject _ _ _ _ => ([decl], nameIdx)

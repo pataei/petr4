@@ -2,11 +2,13 @@ Require Export Coq.Classes.EquivDec.
 Require Export Coq.Numbers.BinNums. (** Integers. *)
 Require Coq.Strings.String.
 Module Strings := Coq.Strings.String.
-Require Poulet4.P4String. (** Strings. *)
-Require Poulet4.Typed. (** Names. *)
-Require Import Coq.Lists.List.
-Import ListNotations.
+Require Export Coq.Bool.Bool.
+Require Export Coq.Lists.List.
+Export ListNotations.
 Require Import Coq.micromega.Lia.
+
+Require Export Poulet4.Monads.Monad.
+Require Export Poulet4.Monads.Option.
 
 (** * Useful Operators *)
 
@@ -16,8 +18,7 @@ Infix "▷" := pipeline (at level 45, left associativity).
 
 Infix "∘" := Basics.compose (at level 40, left associativity).
 
-(** Haskell's [$] operator, Coq is angry at the "$" token. *)
-Infix "#" := Basics.apply (at level 75, right associativity).
+Infix "$" := Basics.apply (at level 41, right associativity).
 
 (** * Useful Notations *)
 Notation "a '&&&&' b"
@@ -30,12 +31,43 @@ Notation "a '||||' b"
 
 (** * Useful Tactics *)
 
+Tactic Notation "unravel" :=
+  simpl;
+  unfold "∘", "$", "▷",
+  mret, mbind, option_ret, option_bind,
+  equiv, complement; simpl.
+
+Tactic Notation "unravel" "in" hyp(H) :=
+  simpl in H;
+  unfold "∘", "$", "▷",
+  mret, mbind, option_ret, option_bind,
+  equiv, complement in H; simpl in H.
+
+Tactic Notation "unravel" "in" "*" :=
+  simpl in *;
+  unfold "∘", "$", "▷",
+  mret, mbind, option_ret, option_bind,
+  equiv, complement in *; simpl in *.
+
 Ltac inv H := inversion H; clear H; subst.
 
 Ltac inv_eq :=
         match goal with
         | H: _ = _ |- _ => inv H
         end.
+(**[]*)
+
+Ltac subst_term :=
+  match goal with
+  | x := _ |- _ => subst x
+  end.
+(**[]*)
+
+Ltac solve_eqn :=
+  match goal with
+  | Ha: ?x = ?a, Hb: ?x = ?b
+    |- _ => rewrite Ha in Hb; inv Hb
+  end.
 (**[]*)
 
 Ltac inv_Forall_cons :=
@@ -48,6 +80,13 @@ Ltac ind_list_Forall :=
   match goal with
   | H: Forall _ ?l
     |- _ => induction l; try inv_Forall_cons
+  end.
+(**[]*)
+
+Ltac inv_Forall2_cons :=
+  match goal with
+  | H: Forall2 _ _ (_ :: _) |- _ => inv H
+  | H: Forall2 _ (_ :: _) _ |- _ => inv H
   end.
 (**[]*)
 
@@ -99,20 +138,47 @@ Arguments Right {_ _}.
 
 (** * Useful Functions And Lemmas *)
 
+Lemma Forall_until_eq : forall {A : Type} (P : A -> Prop) prf1 prf2 a1 a2 suf1 suf2,
+    Forall P prf1 -> Forall P prf2 -> ~ P a1 -> ~ P a2 ->
+    prf1 ++ a1 :: suf1 = prf2 ++ a2 :: suf2 ->
+    prf1 = prf2 /\ a1 = a2 /\ suf1 = suf2.
+Proof.
+  intros A P prf1;
+  induction prf1 as [| hp1 tp1 IHtp1 ];
+  intros [| hp2 tp2 ] a1 a2 suf1 suf2 Hp1 Hp2 Ha1 Ha2 Heq;
+  repeat inv_Forall_cons; simpl in *; inv Heq;
+  try contradiction; try auto 3.
+  apply IHtp1 in H5; intuition; subst; reflexivity.
+Qed.
+
+Lemma map_compose : forall {A B C : Type} (f : A -> B) (g : B -> C) l,
+    map (g ∘ f) l = map g (map f l).
+Proof.
+  intros; induction l; unravel in *; auto.
+  rewrite IHl; reflexivity.
+Qed.
+
+Lemma split_map : forall {A B : Type} (l : list (A * B)),
+    split l = (map fst l, map snd l).
+Proof.
+  induction l as [| [a b] l IHl]; unravel; auto.
+  destruct (split l) as [la lb] eqn:eqsplit.
+  inv IHl; reflexivity.
+Qed.
+
 Lemma ex_equiv_dec_refl :
   forall (X : Type) (x : X) (R : X -> X -> Prop) `{EqDec X R},
     exists l, equiv_dec x x = left l.
 Proof.
   intros; destruct (equiv_dec x x) as [Hx | Hx];
-  unfold equiv, complement in *; eauto.
-  assert (R x x) by reflexivity; contradiction.
+  unravel in *; eauto. assert (R x x) by reflexivity; contradiction.
 Qed.
 
 Ltac equiv_dec_refl_tactic :=
   match goal with
   | |- context [equiv_dec ?x ?x]
     => destruct (equiv_dec x x) as [? | ?];
-      unfold equiv, complement in *; try contradiction
+      unravel in *; try contradiction
   end.
 
 Lemma equiv_dec_refl :
@@ -137,24 +203,13 @@ Lemma lifted_andb_true :
 Proof.
   intros X x1 x2 R EQR EQDECR b H.
   destruct (equiv_dec x1 x2) as [Hx | Hx]; destruct b;
-  simpl in *; try discriminate; intuition.
+  unravel in *; try discriminate; intuition.
 Qed.
 
 Ltac destruct_lifted_andb :=
   match goal with
   | H: _ &&&& _ = true |- _ => apply lifted_andb_true in H as [? ?]
   end.
-
-(** Temporary bind. *)
-Definition bind_option {A B : Type}
-           (ma : option A) (f : A -> option B) : option B :=
-  match ma with
-  | None => None
-  | Some a => f a
-  end.
-
-Definition map_option {A B : Type} (ma : option A) (f : A -> B) : option B :=
-  bind_option ma (Some ∘ f).
 
 Definition curry3 {A B C D : Type}
            (f : A * B * C -> D) : A -> B -> C -> D :=
@@ -176,6 +231,14 @@ Definition uncurry4 {A B C D E : Type}
   f a b c d.
 (**[]*)
 
+Definition fourple_1 {A B C D : Type}  '((a,_,_,_) : A * B * C * D) : A := a.
+
+Definition fourple_2 {A B C D : Type}  '((_,b,_,_) : A * B * C * D) : B := b.
+
+Definition fourple_3 {A B C D : Type}  '((_,_,c,_) : A * B * C * D) : C := c.
+
+Definition fourple_4 {A B C D : Type}  '((_,_,_,d) : A * B * C * D) : D := d.
+
 (** Update position [n] of list [l],
     or return [l] if [n] is too large. *)
 Fixpoint nth_update {A : Type} (n : nat) (a : A) (l : list A) : list A :=
@@ -191,7 +254,7 @@ Lemma nth_error_exists : forall {A:Type} (l : list A) n,
     n < length l -> exists a, nth_error l n = Some a.
 Proof.
   intros A l; induction l as [| h t IHt];
-    intros [] Hnl; simpl in *; try lia.
+    intros [] Hnl; unravel in *; try lia.
   - exists h; reflexivity.
   - apply IHt; lia.
 Qed.
@@ -248,7 +311,7 @@ Qed.
 Lemma In_repeat : forall {A : Type} (a : A) n,
     0 < n -> In a (repeat a n).
 Proof.
-  intros A a [|] H; try lia; simpl; intuition.
+  intros A a [|] H; try lia; unravel; intuition.
 Qed.
 
 Lemma Forall_repeat : forall {A : Type} (P : A -> Prop) n a,
@@ -263,7 +326,7 @@ Lemma repeat_Forall : forall {A : Type} (P : A -> Prop) n a,
     P a -> Forall P (repeat a n).
 Proof.
   intros A P n a H.
-  induction n as [| n IHn]; simpl; constructor; auto.
+  induction n as [| n IHn]; unravel; constructor; auto.
 Qed.
 
 Lemma Forall_firstn : forall {A : Type} (P : A -> Prop) n l,
@@ -282,26 +345,97 @@ Qed.
 
 Lemma Forall2_length : forall {A B : Type} (R : A -> B -> Prop) l1 l2,
     Forall2 R l1 l2 -> length l1 = length l2.
-Proof. intros A B R l1 l2 H; induction H; simpl; auto. Qed.
+Proof. intros A B R l1 l2 H; induction H; unravel; auto. Qed.
+
+Lemma Forall2_duh : forall {A B : Type} (P : A -> B -> Prop),
+    (forall a b, P a b) ->
+    forall la lb, length la = length lb -> Forall2 P la lb.
+Proof.
+  induction la; destruct lb; intros;
+  unravel in *; try discriminate; constructor; auto.
+Qed.
+
+Lemma Forall2_map_l : forall {A B C : Type} (f : A -> B) (R : B -> C -> Prop) la lc,
+    Forall2 R (map f la) lc <-> Forall2 (R ∘ f) la lc.
+Proof.
+  induction la as [| a la IHal]; intros [| c lc];
+  unravel in *; split; intros; intuition; inv_Forall2_cons;
+  constructor; try apply IHal; auto.
+Qed.
+
+Lemma Forall2_Forall : forall {A : Type} (R : A -> A -> Prop) l,
+    Forall2 R l l <-> Forall (fun a => R a a) l.
+Proof.
+  induction l; split; intros;
+  try inv_Forall_cons;  try inv_Forall2_cons; intuition.
+Qed.
+
+Lemma Forall_duh : forall {A : Type} (P : A -> Prop),
+    (forall a, P a) -> forall l, Forall P l.
+Proof.
+  induction l; constructor; auto.
+Qed.
+
+Lemma Forall_exists_prefix_only_or_all : forall {A : Type} (P : A -> Prop) (l : list A),
+    (forall a, P a \/ ~ P a) ->
+    Forall P l \/ exists a prefix suffix, l = prefix ++ a :: suffix /\ Forall P prefix /\ ~ P a.
+Proof.
+  intros A P l HP;
+  induction l as [| h t [IHt | [a [prf [suf [Heq [Hprf Ha]]]]]]];
+  intuition; subst.
+  - destruct (HP h) as [? | ?]; intuition.
+    right. exists h; exists []; exists t; intuition.
+  - right. destruct (HP h) as [? | ?].
+    + exists a; exists (h :: prf); exists suf; intuition.
+    + exists h; exists []; exists (prf ++ a :: suf); intuition.
+Qed.
+
+(** Option Predicate *)
+Inductive predop {A : Type} (P : A -> Prop) : option A -> Prop :=
+| predop_none : predop P None
+| predop_some (a : A) : P a -> predop P (Some a).
+
+(** * Option Relations *)
+Section Relop.
+  Context {A B : Type}.
+  Variable R : A -> B -> Prop.
+
+  Inductive relop : option A -> option B -> Prop :=
+  | relop_none : relop None None
+  | relop_some a b : R a b -> relop (Some a) (Some b).
+End Relop.
 
 (** * Option Equivalence *)
+Section Relop.
+  Context {A : Type}.
+  Variable R : A -> A -> Prop.
+  Context `{HAR : Equivalence A R}.
 
-Inductive relop {A : Type} (R : A -> A -> Prop) : option A -> option A -> Prop :=
-| relop_none : relop R None None
-| relop_some (a1 a2 : A) : R a1 a2 -> relop R (Some a1) (Some a2).
+  Lemma RelopReflexive : Reflexive (relop R).
+  Proof.
+    intros [? |]; constructor; reflexivity.
+  Qed.
+
+  Lemma RelopSymmetric : Symmetric (relop R).
+  Proof.
+    intros [? |] [? |] H; inv H; constructor; symmetry; assumption.
+  Qed.
+
+  Lemma RelopTransitive : Transitive (relop R).
+  Proof.
+    intros [? |] [? |] [? |] H12 H23; inv H12; inv H23;
+    constructor; etransitivity; eassumption.
+  Qed.
+End Relop.
 
 Instance OptionEquivalence
          (A : Type) (R : A -> A -> Prop)
          `{Equivalence A R} : Equivalence (relop R).
 Proof.
-  inversion H; constructor;
-    unfold Reflexive, Symmetric, Transitive in *.
-  - intros [a |]; constructor; auto.
-  - intros [a1 |] [a2 |] H'; inversion H';
-      subst; constructor; auto.
-  - intros [a1 |] [a2 |] [a3 |] H12 H23;
-      inversion H12; inversion H23;
-        subst; constructor; eauto.
+  Local Hint Resolve RelopReflexive : core.
+  Local Hint Resolve RelopSymmetric : core.
+  Local Hint Resolve RelopTransitive : core.
+  constructor; auto.
 Defined.
 
 Instance OptionEqDec
@@ -316,6 +450,11 @@ Proof.
     try (left; constructor; auto).
 Defined.
 
+Lemma relop_eq : forall {A : Type} (o1 o2 : option A), relop eq o1 o2 <-> o1 = o2.
+Proof.
+  intros; split; intros H; inv H; reflexivity.
+Qed.
+
 Section ProdEquivalence.
   Context {A B : Type}.
 
@@ -327,7 +466,7 @@ Section ProdEquivalence.
 
   Context `{Equivalence B RB}.
 
-  Let RAB ab1 ab2 := RA (fst ab1) # fst ab2 /\ RB (snd ab1) # snd ab2.
+  Let RAB ab1 ab2 := RA (fst ab1) $ fst ab2 /\ RB (snd ab1) $ snd ab2.
 
   Lemma prod_reflexive : Reflexive RAB.
   Proof.
@@ -365,104 +504,3 @@ Instance ZEqDec : EqDec Z eq := { equiv_dec := BinInt.Z.eq_dec }.
 Definition string := String.string.
 
 Instance StringEqDec : EqDec string eq := { equiv_dec := Strings.string_dec }.
-
-Section TypeSynonyms.
-  Variable (tags_t : Type).
-
-  (** Tagged strings. *)
-  Definition p4string : Type := Poulet4.P4String.t tags_t.
-
-  Global Instance P4StringEqDec : EqDec p4string (@P4String.equiv tags_t) :=
-    P4String.P4StringEqDec tags_t.
-  (**[]*)
-
-(* Not used in P4cub.
-  Definition int : Type := Poulet4.P4Int.t tags_t.
-
-  Global Instance P4IntEquivalence : Equivalence (@P4Int.equiv tags_t) :=
-    P4Int.IntEquivalence tags_t.
-  (**[]*)
-
-  Global Instance P4IntEqDec : EqDec int (P4Int.equiv) :=
-    P4Int.IntEqDec tags_t.
-  (**[]*)
-*)
-
-(* Qualified names will no longer be used in p4cub.
-  Definition name : Type := @Typed.name tags_t.
-
-  Definition equivn (n1 n2 : name) : Prop :=
-    match n1, n2 with
-    | Typed.BareName x1,
-      Typed.BareName x2          => P4String.equiv x1 x2
-    | Typed.QualifiedName xs1 x1,
-      Typed.QualifiedName xs2 x2 =>
-        P4String.equiv x1 x2 /\
-        List.Forall2 (@P4String.equiv tags_t) xs1 xs2
-    | _, _ => False
-    end.
-
-  Lemma equivn_reflexive : Reflexive equivn.
-  Proof.
-    intros [? | ? ?]; simpl; repeat split; reflexivity.
-  Qed.
-
-  Lemma equivn_symmetric : Symmetric equivn.
-  Proof.
-    intros [x | xs x] [y | ys y] H; simpl in *; auto.
-    - symmetry. assumption.
-    - destruct H as [Hxy H]. split; try (symmetry; assumption).
-  Qed.
-
-  Lemma equivn_transitive : Transitive equivn.
-  Proof.
-    intros [x | xs x] [y | ys y] [z | zs z] Hxy Hyz;
-      simpl in *; auto; try contradiction.
-    - transitivity y; auto.
-    - destruct Hxy as [Hxy Hxys]; destruct Hyz as [Hyz Hyzs]; split.
-      + transitivity y; auto.
-      + clear x y z Hxy Hyz.
-        generalize dependent zs; generalize dependent ys.
-        induction xs as [| x xs IHxs];
-          intros [| y ys] Hxy [| z zs] Hyz;
-          inversion Hxy; clear Hxy;
-            inversion Hyz; clear Hyz; subst; auto.
-        constructor.
-        * transitivity y; auto.
-        * apply IHxs with ys; auto.
-  Qed.
-
-  Global Instance NameEquivalence : Equivalence equivn.
-  Proof.
-    constructor; [ apply equivn_reflexive
-                 | apply equivn_symmetric
-                 | apply equivn_transitive].
-  Defined.
-
-  Definition equivn_dec : forall n1 n2 : name,
-      { equivn n1 n2 } + { ~ equivn n1 n2 }.
-  Proof.
-    intros [x | xs x] [y | ys y]; simpl; auto.
-    - pose proof equiv_dec x y; auto.
-    - assert (H : {List.Forall2 (@P4String.equiv tags_t) xs ys} +
-                  {~ List.Forall2 (@P4String.equiv tags_t) xs ys}).
-      { clear x y; generalize dependent ys.
-        induction xs as [| x xs IHxs]; intros [| y ys];
-          try (right; intros H'; inversion H'; contradiction).
-        - left; constructor.
-        - pose proof equiv_dec x y as Hxy; specialize IHxs with ys;
-            unfold equiv in *; unfold complement in *.
-          destruct Hxy as [Hxy | Hxy]; destruct IHxs as [IH | IH];
-            try (right; intros H'; inversion H'; contradiction).
-          left. constructor; auto. }
-      destruct (equiv_dec x y) as [Hxy | Hxy]; destruct H as [H | H];
-        unfold equiv in *; unfold complement in *;
-          try (right; intros [Hxy' H']; contradiction).
-      left; auto.
-  Defined.
-
-  Global Instance NameEqDec : EqDec name equivn :=
-    { equiv_dec := equivn_dec }.
-  (**[]*)
-*)
-End TypeSynonyms.

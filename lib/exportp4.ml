@@ -183,11 +183,7 @@ let rec print_type p (typ : coq_P4Type) =
           (print_list print_param) params
           print_type ret_type
 and print_field_type p (field: coq_FieldType) =
-  match field with
-  | MkFieldType (s, typ) ->
-      fprintf p "(@[<hov 4>MkFieldType@ %a@ %a)@]"
-          p4string s
-          print_type typ
+  print_pair p4string print_type p field
 and print_control_type p (ctrl: coq_ControlType) =
   match ctrl with
   | MkControlType (typ_params, params) ->
@@ -285,6 +281,17 @@ let print_op_bin p (op: coq_OpBin) =
     | Or -> "Or"
   in fprintf p "%s" s
 
+let print_locator p (loc: coq_Locator) =
+  match loc with
+  | LGlobal [] ->
+      fprintf p "NoLocator"
+  | LGlobal path ->
+      fprintf p "(@[<hov 4>LGlobal@ %a)@]" (* TODO formatting *)
+          p4strings path
+  | LInstance path ->
+      fprintf p "(@[<hov 4>LInstance@ %a)@]" (* TODO formatting *)
+          p4strings path
+
 let rec print_expr p (expr : coq_Expression) =
   match expr with
   | MkExpression (info, pre_expr, typ, dir) ->
@@ -299,14 +306,15 @@ and print_pre_expr p (pre_expr : coq_ExpressionPreT) =
       fprintf p "(@[<hov 0>ExpBool@ %a)@]"
           print_bool b
   | ExpInt n ->
-      fprintf p "(@[<hov 0>ExpInt@ %a)@]" 
+      fprintf p "(@[<hov 0>ExpInt@ %a)@]"
           p4int n
   | ExpString s ->
-      fprintf p "(@[<hov 0>ExpString@ %a)@]" 
+      fprintf p "(@[<hov 0>ExpString@ %a)@]"
           p4string s
-  | ExpName name ->
-      fprintf p "(@[<hov 0>ExpName@ %a)@]" 
+  | ExpName (name, loc) ->
+      fprintf p "(@[<hov 0>ExpName@ %a@ %a)@]" 
           print_name name
+          print_locator loc
   | ExpArrayAccess (array, index) ->
       fprintf p "(@[<hov 4>ExpArrayAccess@ %a@ %a)@]"
           print_expr array
@@ -518,10 +526,9 @@ let rec print_value_base p (value : coq_ValueBase)=
           (print_list (print_pair p4string print_value_base)) fields
 and print_value_set p (val_set: coq_ValueSet) =
   match val_set with
-  | ValSetSingleton (width, value) ->
-      fprintf p "(@[<hov 4>ValSetSingleton@ %a@ %a)@]" 
-          print_nat width
-          print_bigint value
+  | ValSetSingleton value ->
+      fprintf p "(@[<hov 4>ValSetSingleton@ %a)@]"
+          print_value_base value
   | ValSetUniversal ->
       fprintf p "@[<hov 4>ValSetUniversal@]"
   | ValSetMask (value, mask) ->
@@ -601,16 +608,18 @@ and print_pre_stmt p (pre_stmt: coq_StatementPreT) =
       fprintf p "(@[<hov 4>StatSwitch@ %a@ %a)@]"
           print_expr expr
           (print_list print_stmt_switch_case) cases
-  | StatConstant (typ, s, value) ->
-      fprintf p "(@[<hov 4>StatConstant@ %a@ %a@ %a)@]"
+  | StatConstant (typ, s, value, loc) ->
+      fprintf p "(@[<hov 4>StatConstant@ %a@ %a@ %a@ %a)@]"
           print_type typ
           p4string s
           print_value_base value
-  | StatVariable (typ, s, init) -> 
-      fprintf p "(@[<hov 4>StatVariable@ %a@ %a@ %a)@]"
+          print_locator loc
+  | StatVariable (typ, s, init, loc) ->
+      fprintf p "(@[<hov 4>StatVariable@ %a@ %a@ %a@ %a)@]"
           print_type typ
           p4string s
           (print_option print_expr) init
+          print_locator loc
   | StatInstantiation (typ, args, s, init) ->
       fprintf p "(@[<hov 4>StatInstantiation@ %a@ %a@ %a@ %a)@]"
           print_type typ
@@ -1038,9 +1047,10 @@ let print_env_eval_env p (env: coq_Env_EvalEnv) =
   
 let rec print_value_pre_lvalue p (lvalue : coq_ValuePreLvalue) = 
   match lvalue with
-  | ValLeftName (name) ->
-      fprintf p "(@[<hov 0>ValLeftName@ %a)@]"
+  | ValLeftName (name, loc) ->
+      fprintf p "(@[<hov 0>ValLeftName@ %a@ %a)@]"
           print_name name
+          print_locator loc
   | ValLeftMember (expr, name) ->
       fprintf p "(@[<hov 4>ValLeftMember@ %a@ %a)@]"
           print_lvalue expr
@@ -1155,7 +1165,7 @@ let print_value p (value: coq_Value) =
           print_value_constructor value
 
 let print_header p =
-  fprintf p "Require Import Petr4.P4defs.@ ";
+  fprintf p "Require Import Poulet4.P4defs.@ ";
   fprintf p "Open Scope string_scope.@ @ ";
   fprintf p "Import ListNotations.@ @ "
 
