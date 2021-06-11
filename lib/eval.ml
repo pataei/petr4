@@ -10,7 +10,7 @@ module Info = I (* JNF: ugly hack *)
 
 let (>>|) v f = Option.map ~f:f v
 
-type env = Eval_env.t
+type env = Prog.coq_Env_EvalEnv
 
 module type Interpreter = sig
 
@@ -45,52 +45,52 @@ module MakeInterpreter (T : Target) = struct
   let rec eval_declaration (ctrl : ctrl) (env : env) (st : state)
       (d : coq_Declaration) : env * state =
     match d with
-    | DeclConstant (_, typ, MkP4String (_, name), value) ->
+    | DeclConstant (_, typ, name, value) ->
       eval_const_decl ctrl env st typ value name
-    | DeclInstantiation (_, typ, args, MkP4String (_, name), None) ->
+    | DeclInstantiation (_, typ, args, name, None) ->
       eval_instantiation ctrl env st typ args name
     | DeclInstantiation (_, _, _, _, Some _) ->
       failwith "abstract externs unsupported"
-    | DeclParser (_, MkP4String (_, name), _, params, constructor_params, locals, states) ->
+    | DeclParser (_, name, _, params, constructor_params, locals, states) ->
       eval_parser_decl env st name constructor_params params locals states
-    | DeclControl (_, MkP4String (_, name), _, params, constructor_params, locals, apply) ->
+    | DeclControl (_, name, _, params, constructor_params, locals, apply) ->
       eval_control_decl env st name constructor_params params locals apply
-    | DeclFunction (_, _, MkP4String (_, name), _, params, body) ->
+    | DeclFunction (_, _, name, _, params, body) ->
       eval_fun_decl env st name params body
-    | DeclExternFunction (_, _, MkP4String (_, name), _, params) ->
+    | DeclExternFunction (_, _, name, _, params) ->
       eval_extern_fun env st name params
-    | DeclVariable (_, typ, MkP4String (_, name), init) ->
+    | DeclVariable (_, typ, name, init) ->
       let (a,b,_) = eval_var_decl ctrl env st typ name init in (a,b)
     | DeclValueSet (_, typ, size, name) ->
       let (a,b,_) = eval_set_decl ctrl env st typ name size in (a,b)
-    | DeclAction (_, MkP4String (_, name), data_params, ctrl_params, body) ->
+    | DeclAction (_, name, data_params, ctrl_params, body) ->
       eval_action_decl env st name data_params ctrl_params body
-    | DeclTable (_, MkP4String (_, name), key, actions, entries, default_action, size, custom_properties) ->
+    | DeclTable (_, name, key, actions, entries, default_action, size, custom_properties) ->
       eval_table_decl ctrl env st name key actions entries default_action size custom_properties
-    | DeclSerializableEnum (_, _, MkP4String (_, name), members) ->
+    | DeclSerializableEnum (_, _, name, members) ->
       eval_senum_decl env st name members
-    | DeclExternObject (_, MkP4String (_, name), type_params, methods) ->
+    | DeclExternObject (_, name, type_params, methods) ->
       eval_extern_obj env st name methods
-    | DeclPackageType (_, MkP4String (_,n), _, params) ->
-      eval_pkgtyp_decl env st n params
+    | DeclPackageType (_, name, _, params) ->
+      eval_pkgtyp_decl env st name params
     | _ -> env, st
 
   and eval_const_decl (ctrl : ctrl) (env : env) (st : state) (typ : coq_P4Type)
-      (v : coq_ValueBase) (name : string) : env * state =
+      (v : coq_ValueBase) (name : P4string.t) : env * state =
     let l = State.fresh_loc () in
     let st = State.insert_heap l (ValBase v) st in
     Eval_env.insert_val_bare name l env, st
 
   and eval_instantiation (ctrl : ctrl) (env : env) (st : state) (typ : coq_P4Type)
-      (args : coq_Expression list) (name : string) : env * state =
-    let env' = Eval_env.set_namespace (Eval_env.get_namespace env ^ name) env in
+      (args : coq_Expression list) (name : P4string.t) : env * state =
+    let env' = Eval_env.set_namespace (Eval_env.get_namespace env ^ name.str) env in
     let (st',_,obj) = eval_nameless env' st typ args in
     let env' = Eval_env.set_namespace (Eval_env.get_namespace env) env in
     let l = State.fresh_loc () in
     let st' = State.insert_heap l obj st' in
     (Eval_env.insert_val_bare name l env', st')
 
-  and eval_parser_decl (env : env) (st : state) (name : string)
+  and eval_parser_decl (env : env) (st : state) (name : P4string.t)
       (constructor_params : coq_P4Parameter list) (params : coq_P4Parameter list)
       (locals : coq_Declaration list) (states : coq_ParserState list) : env * state =
     let v: coq_ValueObject =
@@ -105,7 +105,7 @@ module MakeInterpreter (T : Target) = struct
     let env = Eval_env.insert_val_bare name l env in
     env, st
 
-  and eval_control_decl (env : env) (st : state) (name : string)
+  and eval_control_decl (env : env) (st : state) (name : P4string.t)
       (constructor_params : coq_P4Parameter list) (params : coq_P4Parameter list)
       (locals : coq_Declaration list) (apply : coq_Block) : env * state =
     let v = VControl {
@@ -120,20 +120,20 @@ module MakeInterpreter (T : Target) = struct
     let env = Eval_env.insert_val_bare name l env in
     env, st
 
-  and eval_fun_decl (env : env) (st : state) (name : string)
+  and eval_fun_decl (env : env) (st : state) (name : P4string.t)
       (params : coq_P4Parameter list) (body : coq_Block) : env * state =
     let l = State.fresh_loc () in
     let st = State.insert_heap l (VFun{scope=env;params;body}) st in
     Eval_env.insert_val_bare name l env, st
 
-  and eval_extern_fun (env : env) (st : state) (name : string)
+  and eval_extern_fun (env : env) (st : state) (name : P4string.t)
       (params : coq_P4Parameter list) : env * state =
     let l = State.fresh_loc () in
     let st = State.insert_heap l (VExternFun {name; caller = None; params;}) st in
     Eval_env.insert_val_bare name l env, st
 
   and eval_var_decl (ctrl : ctrl) (env : env) (st : state) (typ : coq_P4Type)
-      (name : string) (init : coq_Expression option) : env * state * signal =
+      (name : P4string.t) (init : coq_Expression option) : env * state * signal =
     let init_val = init_val_of_typ env typ in
     let l = State.fresh_loc () in
     let st = State.insert_heap l init_val st in
@@ -150,7 +150,7 @@ module MakeInterpreter (T : Target) = struct
       | signal -> env, st, signal
 
   and eval_set_decl (ctrl : ctrl) (env : env) (st : state) (typ : coq_P4Type)
-      (name : string) (size : coq_Expression) : env * state * signal =
+      (name : P4string.t) (size : coq_Expression) : env * state * signal =
     let env = Eval_env.insert_typ_bare name typ env in
     let (st, s, size') = eval_expr env st SContinue size in
     let size'' = assert_rawint size' in
@@ -168,7 +168,7 @@ module MakeInterpreter (T : Target) = struct
     | SReject _ -> (env, st, s)
     | _ -> failwith "value set declaration should not return or exit"
 
-  and eval_action_decl (env : env) (st : state) (name : string)
+  and eval_action_decl (env : env) (st : state) (name : P4string.t)
       (data_params : coq_P4Parameter list) (ctrl_params : coq_P4Parameter list)
       (body : coq_Block) : env * state =
     let l = State.fresh_loc () in
@@ -176,7 +176,7 @@ module MakeInterpreter (T : Target) = struct
       (VAction{scope=env; params = data_params @ ctrl_params; body}) st in
     Eval_env.insert_val_bare name l env, st
 
-  and eval_table_decl (ctrl : ctrl) (env : env) (st : state) (name : string)
+  and eval_table_decl (ctrl : ctrl) (env : env) (st : state) (name : P4string.t)
       (key : Table.key list) (actions : coq_TableActionRef list)
       (entries : (Table.entry list) option) (default : coq_TableActionRef option)
       (size : P4Int.t option) (props : Table.property list) : env * state =
@@ -200,7 +200,7 @@ module MakeInterpreter (T : Target) = struct
     let st = State.insert_heap l v st in
     (Eval_env.insert_val_bare name l env, st)
 
-  and eval_senum_decl (env : env) (st : state) (name : string)
+  and eval_senum_decl (env : env) (st : state) (name : P4string.t)
       (ms : (P4String.t * coq_Expression) list) : env * state =
     let ((st,_),es) = List.fold_map ms ~init:(st,SContinue)
       ~f:(fun (st,s) (n,e) -> let (st,s,v) = eval_expr env st s e in (st,s), (snd n,v)) in
@@ -209,7 +209,7 @@ module MakeInterpreter (T : Target) = struct
     let st = State.insert_heap l v st in
     Eval_env.insert_val_bare name l env, st
 
-  and eval_extern_obj (env : env) (st : state) (name : string)
+  and eval_extern_obj (env : env) (st : state) (name : P4string.t)
       (methods : MethodPrototype.t list) : env * state =
     let v = let open MethodPrototype in methods
       |> List.map ~f:snd
@@ -221,7 +221,7 @@ module MakeInterpreter (T : Target) = struct
     let env = Eval_env.insert_val_bare name l env in
     env, st
 
-  and eval_pkgtyp_decl (env : env) (st : state) (name : string)
+  and eval_pkgtyp_decl (env : env) (st : state) (name : P4string.t)
       (params : coq_P4Parameter list) : env * state =
     let v = VPackage {params; args = []} in
     let l = State.fresh_loc () in
@@ -414,7 +414,7 @@ module MakeInterpreter (T : Target) = struct
 
   and eval_table (ctrl : ctrl) (env : env) (st : state) (key : Table.pre_key list)
       (entries : Table.pre_entry list)
-      (name : string) (actions : coq_TableActionRef list)
+      (name : P4string.t) (actions : coq_TableActionRef list)
       (default : coq_TableActionRef) : state * signal * coq_Value =
     let ks = key |> List.map ~f:(fun k -> k.key) in
     let mks = key |> List.map ~f:(fun k -> k.match_kind |> snd) in
@@ -911,7 +911,7 @@ module MakeInterpreter (T : Target) = struct
   (* Membership Evaluation *)
   (*----------------------------------------------------------------------------*)
 
-  and eval_struct_mem (env : env) (st : state) (name : string)
+  and eval_struct_mem (env : env) (st : state) (name : P4string.t)
       (fs : (string * coq_Value) list) : state * signal * coq_Value =
     (st, SContinue, (find_exn fs name))
 
@@ -980,7 +980,7 @@ module MakeInterpreter (T : Target) = struct
       (next : Bigint.t) : state * signal * coq_Value =
     st, SContinue, Bigint.(VBit {w= of_int 32; v= next - one})
 
-  and eval_stack_builtin (env : env) (st : state) (name : string)
+  and eval_stack_builtin (env : env) (st : state) (name : P4string.t)
       (e : coq_Expression) : state * signal * coq_Value =
     let (st', signal, lv) = lvalue_of_expr env st SContinue e in
     st', signal, VBuiltinFun{name; caller = Option.value_exn lv}
@@ -989,7 +989,7 @@ module MakeInterpreter (T : Target) = struct
   (* Function and Method Call Evaluation *)
   (*----------------------------------------------------------------------------*)
 
-  and eval_extern_call (callenv : env) (st : state) (name : string)
+  and eval_extern_call (callenv : env) (st : state) (name : P4string.t)
       (v : (loc * string) option) (params : coq_P4Parameter list) (targs : coq_P4Type list)
       (args : coq_Expression option list) : state * signal * coq_Value =
     let ts = args |> List.map ~f:(function Some e -> (snd e).typ | None -> Void) in
@@ -1108,7 +1108,7 @@ module MakeInterpreter (T : Target) = struct
   (* Built-in Function Evaluation *)
   (*----------------------------------------------------------------------------*)
 
-  and eval_builtin (ctrl :ctrl) (env : env) (st : state) (name : string) (lv : coq_ValueLvalue)
+  and eval_builtin (ctrl :ctrl) (env : env) (st : state) (name : P4string.t) (lv : coq_ValueLvalue)
       (args : coq_Expression option list) : state * signal * coq_Value =
     match name with
     | "isValid"    -> eval_isvalid env st lv
@@ -1375,7 +1375,7 @@ module MakeInterpreter (T : Target) = struct
   and extract_from_state (st : state) (l : loc) : coq_Value =
     State.find_heap l st
 
-  and name_only (name: Typed.name) =
+  and name_only (name: P4name.t) =
     match name with
     | BareName s
     | QualifiedName (_, s) -> s
@@ -1386,10 +1386,10 @@ module MakeInterpreter (T : Target) = struct
     | StatSwCaseFallThrough (_, label) ->
       match label with
       | StatSwLabDefault _ -> true
-      | StatSwLabName (_, (MkP4String (_, name))) ->
+      | StatSwLabName (_, ({str = name; _})) ->
         String.equal s name
 
-  and name_of_type_ref (typ: coq_P4Type) : Typed.name =
+  and name_of_type_ref (typ: coq_P4Type) : P4name.t =
     match typ with
     | TypTypeName name -> name
     | TypNewType (name, _) -> BareName name

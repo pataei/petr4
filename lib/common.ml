@@ -112,11 +112,11 @@ module Make_parse (Conf: Parse_config) = struct
           let oc = Out_channel.create export_file in
           let prog' =
             if normalize then
-              Poulet4.SimplExpr.transform_prog Info.dummy typed_prog
+              Poulet4.SimplExpr.transform_prog (Info.dummy, []) typed_prog
             else typed_prog in
           let prog'' =
             if gen_loc then
-              match Poulet4.GenLoc.transform_prog Info.dummy prog' with
+              match Poulet4.GenLoc.transform_prog (Info.dummy, []) prog' with
               | Coq_inl prog'' -> prog''
               | Coq_inr ex -> failwith "error occurred in GenLoc"
             else prog' in

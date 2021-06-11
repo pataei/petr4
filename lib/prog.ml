@@ -21,7 +21,7 @@ type 'a pre_Locator =
   [%import:'a Poulet4.Syntax.coq_Locator
     [@with Poulet4.P4String.t := P4string.pre_t]]
   [@@deriving sexp,show,yojson]
-type coq_Locator = Info.t pre_Locator
+type coq_Locator = (Info.t * Types.Annotation.t list) pre_Locator
   [@@deriving sexp,show,yojson]
 let noLocator = LGlobal []
 type 'a pre_KeyValue =

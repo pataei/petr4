@@ -2350,7 +2350,7 @@ and resolve_function_overload_by ~f env ctx (func: Types.Expression.t) : Prog.co
         |> List.map ~f:fst
         |> List.find ~f:ok
       with
-      | Some typ -> MkExpression (fst func, ExpName (name, Prog.noLocator), typ, Directionless)
+      | Some typ -> MkExpression ((fst func, []), ExpName (name, Prog.noLocator), typ, Directionless)
       | _ -> type_expression env ctx func
     end
   | ExpressionMember { expr; name } ->
@@ -3446,10 +3446,10 @@ and type_table' env ctx info annotations (name: P4string.t) key_types action_map
       Checker_env.insert_type (BareName action_enum_name)
         action_enum_typ env
     in
-    let hit_field = ({P4string.tags=Info.dummy; str="hit"}, TypBool) in
-    let miss_field = ({P4string.tags=Info.dummy; str="miss"}, TypBool) in
+    let hit_field = ({P4string.tags=(Info.dummy, []); str="hit"}, TypBool) in
+    let miss_field = ({P4string.tags=(Info.dummy, []); str="miss"}, TypBool) in
     (* How to represent the type of an enum member *)
-    let run_field = ({P4string.tags=Info.dummy; str="action_run"}, action_enum_typ) in
+    let run_field = ({P4string.tags=(Info.dummy, []); str="action_run"}, action_enum_typ) in
     let apply_result_typ = TypStruct [hit_field; miss_field; run_field] in
     (* names of table apply results are "apply_result_<<table name>>" *)
     let result_typ_name = {name with str = "apply_result_" ^ name.str} in
