@@ -1,7 +1,6 @@
 Require Import Coq.Strings.String.
 Require Import Coq.Classes.EquivDec.
 Require Import Coq.Bool.Bool.
-Require Import Coq.Classes.EquivDec.
 
 Require AList.
 
@@ -28,6 +27,9 @@ Definition equiv [tags_t: Type] (s1 s2: t tags_t) : Prop :=
 
 Definition equivb [tags_t: Type] (s1 s2: t tags_t) :=
   String.eqb s1.(str) s2.(str).
+
+Definition nequivb [tags_t: Type] (s1 s2: t tags_t) :=
+  negb (String.eqb s1.(str) s2.(str)).
 
 Definition eq_const [tags_t: Type] (s1: t tags_t) (s2: string) :=
   String.eqb s1.(str) s2.

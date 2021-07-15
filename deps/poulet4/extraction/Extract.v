@@ -29,8 +29,10 @@ Extract Inlined Constant BinNat.N.eqb => "Bigint.(=)".
 Extract Inlined Constant BinNat.N.add => "Bigint.(+)".
 Extract Inlined Constant Nat.add => "(+)".
 
-
 Require Poulet4.Syntax.
 Require Poulet4.Typed.
 
-Separate Extraction Syntax Typed SimplExpr GenLoc.
+
+Separate Extraction Poulet4.Syntax
+         Poulet4.Typed Poulet4.SimplExpr
+         Poulet4.GenLoc.
