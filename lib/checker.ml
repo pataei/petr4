@@ -1,4 +1,5 @@
 open Types
+open Poulet4.Typed
 open Typed
 open Util
 open Checker_env
@@ -540,8 +541,12 @@ and gen_all_constraints (env: Checker_env.t) ctx unknowns (params_args: (coq_P4P
       | Some arg_constraints ->
         let constraints = merge_constraints env constraints arg_constraints in
         gen_all_constraints env ctx unknowns more constraints
-      | None -> raise_s [%message "Could not solve type equality."
-                         ~param:(reduce_type env param_type: coq_P4Type) ~arg_typ:(reduce_type env expr_typ: coq_P4Type)]
+      | None ->
+         let param_type = reduce_type env param_type in
+         let expr_typ = reduce_type env expr_typ in
+         raise_s [%message "Could not solve type equality."
+                     ~param:(Pretty.fmt_string Pretty.Typed.format_coq_P4Type param_type)
+                     ~arg_typ:(Pretty.fmt_string Pretty.Typed.format_coq_P4Type expr_typ)]
     end
   | (param_type, None) :: more ->
     gen_all_constraints env ctx unknowns more constraints
@@ -653,7 +658,8 @@ and solve_types
       else None
     | TypSpecializedType (base, args), _
     | _, TypSpecializedType (base, args) ->
-      raise_s [%message "Stuck specialized type." ~t:(TypSpecializedType (base, args):coq_P4Type)]
+       raise_s [%message "Stuck specialized type."
+                   ~t:(Pretty.fmt_string Pretty.Typed.format_coq_P4Type (TypSpecializedType (base, args)))]
     | TypTypeName (BareName tv1), TypTypeName (BareName tv2) ->
       if type_vars_equal_under equiv_vars tv1 tv2
       then Some (empty_constraints unknowns)
@@ -1326,7 +1332,8 @@ and validate_param env ctx (typ: coq_P4Type) dir info opt_value =
   if is_compile_time_only_type env typ && not @@ eq_dir dir Directionless
   then failwith "Parameters of this type must be directionless.";
   if not @@ is_well_formed_type env typ
-  then raise_s [%message "Parameter type is not well-formed." ~typ:(typ:coq_P4Type)];
+  then raise_s [%message "Parameter type is not well-formed."
+                     ~typ:(Pretty.fmt_string Pretty.Typed.format_coq_P4Type typ)];
   if not @@ is_valid_param_type env ctx typ
   then failwith "Type cannot be passed as a parameter.";
   if opt_value <> None && not (eq_dir dir Directionless) && not (eq_dir dir In)
@@ -1362,7 +1369,7 @@ and type_params env ctx param =
 and type_constructor_param env decl_kind (param: Types.Parameter.t) : coq_P4Parameter =
   if (snd param).direction <> None
   then raise_s [%message "Constructor parameters must be directionless"
-        ~param:(param: Types.Parameter.t)];
+        ~param:(Pretty.fmt_string Pretty.Types.Parameter.format_t param)];
   type_param env (ParamCxConstructor decl_kind) param
 
 and type_constructor_params env ctx params =
@@ -1875,7 +1882,7 @@ and type_error_member env ctx (name: P4string.t) : Prog.coq_ExpressionPreT * coq
 
 and header_methods typ =
   let fake_fields: coq_FieldType list =
-    [({P4string.tags=(Info.dummy, []); str="isValid"},
+    [({tags=(Info.dummy, []); str="isValid"},
       TypFunction (MkFunctionType ([], [], FunBuiltin, TypBool)))]
   in
   match typ with
@@ -2074,7 +2081,7 @@ and match_positional_args_to_params env call_site_info params args =
           then conv param Missing :: go params args
           else raise_s [%message "missing argument for parameter"
                 ~info:(call_site_info: Info.t)
-                ~param:(param: coq_P4Parameter)]
+                ~param:(Pretty.fmt_string Pretty.Typed.format_coq_P4Parameter param)]
       end
     | [], arg :: args ->
       raise_s [%message "too many arguments"
@@ -2104,8 +2111,8 @@ and match_named_args_to_params env call_site_info (params: coq_P4Parameter list)
         if opt_of_param p
         then (p, None) :: match_named_args_to_params env call_site_info params other_args
         else raise_s [%message "parameter has no matching argument"
-              ~call_site:(call_site_info: Info.t)
-              ~param:(p: coq_P4Parameter)]
+                         ~call_site:(call_site_info: Info.t)
+                         ~param:(Pretty.fmt_string Pretty.Typed.format_coq_P4Parameter p)]
     end
   | [] ->
     match args with
@@ -2113,7 +2120,7 @@ and match_named_args_to_params env call_site_info (params: coq_P4Parameter list)
     | a :: rest ->
       raise_s [%message "too many arguments supplied at call site"
           ~info:(call_site_info: Info.t)
-          ~unused_args:(args : Types.Argument.pre_t list)]
+          ~unused_args:Pretty.(fmt_string (format_list_sep Types.Argument.format_pre_t ",") args)]
 
 and is_lvalue env (expr_typed: Prog.coq_Expression) =
   let MkExpression (_, expr, expr_typ, expr_dir) = expr_typed in
@@ -2320,7 +2327,7 @@ and resolve_constructor_overload_by ~f:(f: coq_P4Parameter list -> bool) env typ
     |> List.map ~f:fst
     |> List.find ~f:ok
   with
-  | Some (Typed.TypConstructor (ts, ws, ps, ret)) -> ts, ws, ps, ret
+  | Some (Poulet4.Typed.TypConstructor (ts, ws, ps, ret)) -> ts, ws, ps, ret
   | ctor -> failwith "Bad constructor type or no matching constructor."
 
 and resolve_constructor_overload env type_name args =
@@ -2439,14 +2446,14 @@ and type_nameless_instantiation env ctx info typ args =
         Directionless
       | _ ->
         raise_s [%message "don't know how to instantiate this type"
-            ~typ:(typ: Types.Type.t)]
+            ~typ:(Pretty.(fmt_string Types.Type.format_t typ))]
     end
   | TypeName tn ->
     let typ = fst typ, Types.Type.SpecializedType { base = typ; args = [] } in
     type_nameless_instantiation env ctx info typ args
   | _ ->
     raise_s [%message "don't know how to instantiate this type"
-        ~typ:(typ: Types.Type.t)]
+        ~typ:(Pretty.(fmt_string Types.Type.format_t typ))]
 
 (* Section 8.12.3 *)
 and type_mask env ctx expr mask =
@@ -2548,7 +2555,7 @@ and type_assignment env ctx stmt_info lhs rhs =
   let lhs_typed = type_expression env expr_ctx lhs in
   if not @@ is_lvalue env lhs_typed
   then raise_s [%message "Must be an lvalue"
-        ~lhs:(lhs:Types.Expression.t)]
+        ~lhs:Pretty.(fmt_string Types.Expression.format_t lhs)]
   else
     let rhs_typed = cast_expression env expr_ctx (type_of_expr lhs_typed) rhs in
     ignore (assert_same_type env (info lhs) (info rhs)
@@ -2744,7 +2751,7 @@ and type_declaration_statement env ctx stmt_info (decl: Declaration.t) : Prog.co
   | Variable _ ->
     let decl_typed, env' = type_declaration env (DeclCxStatement ctx) decl in
     stmt_of_decl_stmt decl_typed, env'
-  | _ -> raise_s [%message "declaration used as statement, but that's not allowed. Parser bug?" ~decl:(decl: Types.Declaration.t)]
+  | _ -> raise_s [%message "declaration used as statement, but that's not allowed. Parser bug?" ~decl:Pretty.(fmt_string Types.Declaration.format_t decl)]
 
 (* Section 10.1
  *
@@ -2909,8 +2916,8 @@ and type_parser env info name annotations type_params params constructor_params 
                 locals_typed,
                 states_typed)
   in
-  let parser_type = Typed.MkControlType ([], params_typed) in
-  let ctor_type = Typed.TypConstructor ([], [], constructor_params_typed, TypParser parser_type) in
+  let parser_type = Poulet4.Typed.MkControlType ([], params_typed) in
+  let ctor_type = Poulet4.Typed.TypConstructor ([], [], constructor_params_typed, TypParser parser_type) in
   let env = Checker_env.insert_type_of (BareName name) ctor_type env in
   parser_typed, env
 
@@ -2945,9 +2952,9 @@ and type_control env info name annotations type_params params constructor_params
                  apply_typed)
   in
   let control_type =
-    Typed.MkControlType ([], params_typed)
+    Poulet4.Typed.MkControlType ([], params_typed)
   in
-  let ctor_type = Typed.TypConstructor ([], [], constructor_params_typed, TypControl control_type) in
+  let ctor_type = Poulet4.Typed.TypConstructor ([], [], constructor_params_typed, TypControl control_type) in
   let env = Checker_env.insert_type_of (BareName name) ctor_type env in
   control, env
 
@@ -3136,7 +3143,7 @@ and type_table_actions env ctx key_types actions =
       | Some (TypAction (data_params, _), _) ->
         data_params
       | _ ->
-        raise_s [%message "invalid action" ~action:(action.name: P4name.t)]
+        raise_s [%message "invalid action" ~action:Pretty.(fmt_string Types.name_format_t action.name)]
     in
     (* Below should fail if there are control plane arguments *)
     let params_args = match_params_to_args env call_info data_params action.args in
@@ -3431,7 +3438,7 @@ and type_table' env ctx info annotations (name: P4string.t) key_types action_map
                          else raise_s [%message "Table must have a non-empty actions property"] end
                        |> List.map ~f:fst
                        |> List.map ~f:P4name.name_only
-                       |> List.map ~f:(fun str -> {P4string.tags=(Info.dummy, []); str})
+                       |> List.map ~f:(fun str -> {Poulet4.P4String.tags=(Info.dummy, []); str})
     in
     let action_enum_name = {name with str="action_list_" ^ name.str} in
     let action_enum_typ = TypEnum (action_enum_name, None, action_names) in
@@ -3446,10 +3453,10 @@ and type_table' env ctx info annotations (name: P4string.t) key_types action_map
       Checker_env.insert_type (BareName action_enum_name)
         action_enum_typ env
     in
-    let hit_field = ({P4string.tags=(Info.dummy, []); str="hit"}, TypBool) in
-    let miss_field = ({P4string.tags=(Info.dummy, []); str="miss"}, TypBool) in
+    let hit_field = ({Poulet4.P4String.tags=(Info.dummy, []); str="hit"}, TypBool) in
+    let miss_field = ({Poulet4.P4String.tags=(Info.dummy, []); str="miss"}, TypBool) in
     (* How to represent the type of an enum member *)
-    let run_field = ({P4string.tags=(Info.dummy, []); str="action_run"}, action_enum_typ) in
+    let run_field = ({Poulet4.P4String.tags=(Info.dummy, []); str="action_run"}, action_enum_typ) in
     let apply_result_typ = TypStruct [hit_field; miss_field; run_field] in
     (* names of table apply results are "apply_result_<<table name>>" *)
     let result_typ_name = {name with str = "apply_result_" ^ name.str} in
@@ -3494,7 +3501,7 @@ and type_header_union_field env (field_info, field) =
   | TypHeader _ ->
     type_field env (field_info, field)
   | _ -> raise_s [%message "header union fields must have header type"
-             ~field:((field_info, field): Types.Declaration.field)]
+             ~field:Pretty.(fmt_string Types.Declaration.format_field (field_info, field))]
 
 (* Section 7.2.3 *)
 and type_header_union env info annotations name fields =
@@ -3632,7 +3639,7 @@ and type_extern_object env info annotations obj_name t_params methods =
     | MethodPrototype.AbstractMethod { annotations; return; name; type_params = t_params; params } ->
       if P4string.eq name obj_name
       then raise_s [%message "extern method must have different name from extern"
-            ~m:(m: MethodPrototype.t)];
+            ~m:Pretty.(fmt_string Types.MethodPrototype.format_t m)];
       let method_type_params = t_params in
       let method_type_params' = t_params in
       let env' = Checker_env.insert_type_vars method_type_params' env' in

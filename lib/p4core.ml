@@ -1,4 +1,6 @@
+open Poulet4.Typed
 open Typed
+open Poulet4.Syntax
 open Prog
 open Target
 open Bitstring
@@ -17,7 +19,7 @@ module Corize (T : Target) : Target = struct
   type extern = state pre_extern
 
   let value_of_field (init_fs : (P4string.t * coq_ValueBase) list)
-                     ((MkFieldType (f, t)): coq_FieldType) : P4string.t * coq_ValueBase =
+                     (f, t) : P4string.t * coq_ValueBase =
     f,
     List.Assoc.find_exn init_fs f ~equal:P4string.eq
 
@@ -205,8 +207,8 @@ module Corize (T : Target) : Target = struct
       let v = val_of_bigint env t (bitstring_slice n Bigint.(w' - one) Bigint.(w'-rmax')) in
       (w - rmax, Bigint.(bitstring_slice n (w' - rmax') zero)), v in
     let fieldvals_of_recordtype (rt : coq_FieldType list) : (P4string.t * coq_ValueBase) list =
-      let names = List.map ~f:(fun (MkFieldType (name, _)) -> name) rt in
-      let types = List.map ~f:(fun (MkFieldType (_, typ)) -> typ) rt in
+      let names = List.map ~f:fst rt in
+      let types = List.map ~f:snd rt in
       let vs = List.fold_map types ~init:(w,n) ~f:f in
       List.zip_exn names (snd vs) in
     match t with
@@ -234,7 +236,8 @@ module Corize (T : Target) : Target = struct
     | TypEnum (_, Some t, _) -> val_of_bigint env t n
     | TypTypeName name -> val_of_bigint env (Eval_env.find_typ name env) n
     | TypNewType (name, typ) -> val_of_bigint env typ n
-    | _ -> raise_s [%message "not a fixed-width type" ~t:(t: coq_P4Type)]
+    | _ -> raise_s [%message "not a fixed-width type"
+                       ~t:Pretty.(fmt_string Typed.format_coq_P4Type t)]
 
   let eval_lookahead : extern = fun env st targs args ->
     let t = match targs with
@@ -279,7 +282,7 @@ module Corize (T : Target) : Target = struct
   let rec field_types_of_typ (env : env) (t : coq_P4Type) : coq_P4Type list =
     match t with
     | TypHeader rt | TypRecord rt | TypStruct rt | TypHeaderUnion rt ->
-      List.map rt ~f:(fun (MkFieldType (_, t)) -> t)
+      List.map rt ~f:snd
     | TypTypeName n -> field_types_of_typ env (Eval_env.find_typ n env)
     | TypNewType (_, t) -> field_types_of_typ env t
     | _ -> failwith "type does not have fields"

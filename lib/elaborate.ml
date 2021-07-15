@@ -138,7 +138,7 @@ and subst_vars_stmt_declaration env decl =
                 name = name;
                 init = option_map (subst_vars_expression env) init }
   | _ -> raise_s [%message "declaration is not allowed as a statement"
-                     ~decl:(decl: Types.Declaration.t)]
+                     ~decl:(Pretty.fmt_string Pretty.Types.Declaration.format_t decl)]
 
 let subst_vars_param env param =
   let open Types.Parameter in

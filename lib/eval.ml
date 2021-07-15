@@ -1,7 +1,9 @@
 module I = Info
 open Core_kernel
+open Poulet4.Syntax
 open Prog
 open Eval_env
+open Poulet4.Typed
 open Typed
 open Target
 open Bitstring
