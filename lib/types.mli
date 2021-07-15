@@ -607,21 +607,21 @@ and P4string : sig
   val dummy: string -> t
 end
 
-  and P4name : sig
-    type 'a pre_t = 'a Poulet4.Typed.name
-    type t = (Info.t * Annotation.t list) pre_t
+and P4name : sig
+  type 'a pre_t = 'a Poulet4.Typed.name
+  type t = (Info.t * Annotation.t list) pre_t
+  
+  val to_bare : t -> t
+  val name_info: t -> Info.t
+  val name_eq : t -> t -> bool
+  val name_only : t -> string
+end
 
-    val to_bare : t -> t
-    val name_info: t -> Info.t
-    val name_eq : t -> t -> bool
-    val name_only : t -> string
-  end
-
-  and P4int : sig
-    type 'a pre_t = 'a Poulet4.P4Int.t
-
-    type t = (Info.t * Annotation.t list) pre_t
-  end
+and P4int : sig
+  type 'a pre_t = 'a Poulet4.P4Int.t
+  
+  type t = (Info.t * Annotation.t list) pre_t
+end
 
 type tag = (Info.t * Annotation.t list)
 
