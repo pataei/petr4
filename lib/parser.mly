@@ -19,7 +19,7 @@ module P4Info = Info
 open Core_kernel
 open Context
 open Types
-open P4string
+open Poulet4.P4String
 
 module Info = P4Info
 
