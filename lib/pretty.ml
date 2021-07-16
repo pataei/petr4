@@ -851,3 +851,9 @@ module Typed = struct
     failwith "unimplemented"
 
 end
+
+module Prog = struct
+  let format_coq_ValueBase fmt v =
+    failwith "unimplemented"
+end
+

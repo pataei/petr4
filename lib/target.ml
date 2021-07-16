@@ -1,5 +1,6 @@
 module I = Info
 open Typed
+open Poulet4.Syntax
 open Prog
 open Env
 open Bitstring
@@ -81,13 +82,13 @@ let rec width_of_typ (env : env) (t : coq_P4Type) : int =
     |> List.fold ~init:0 ~f:(+)
   | TypRecord fields | TypHeader fields | TypStruct fields ->
     fields
-    |> List.map ~f:(fun (MkFieldType (name, typ)) -> typ)
+    |> List.map ~f:snd
     |> List.map ~f:(width_of_typ env)
     |> List.fold ~init:0 ~f:(+)
   | TypEnum (_, Some t, _) -> width_of_typ env t
   | TypTypeName n -> width_of_typ env (Eval_env.find_typ n env)
   | TypNewType (name, typ) -> width_of_typ env typ
-  | _ -> raise_s [%message "not a fixed-width type" ~t:(t:coq_P4Type)]
+  | _ -> raise_s [%message "not a fixed-width type" ~t:Pretty.(fmt_string Typed.format_coq_P4Type t)]
 
 let rec init_val_of_typ (env : env) (typ : coq_P4Type) : coq_Value =
   match typ with
@@ -150,7 +151,7 @@ and init_val_of_tuple (env : env) (types : coq_P4Type list) : coq_ValueBase =
   let vs = List.map types ~f:(fun t -> init_val_of_base_typ env t) in
   ValBaseTuple vs
 
-and init_val_of_field (env : env) (MkFieldType (name, typ): coq_FieldType) : P4string.t * coq_ValueBase =
+and init_val_of_field (env : env) (name, typ) : P4string.t * coq_ValueBase =
   name, init_val_of_base_typ env typ
 
 and init_val_of_record (env : env) (r : coq_FieldType list) : coq_ValueBase =
@@ -226,13 +227,13 @@ let rec width_of_val (v: coq_ValueBase) =
       width_of_val v
   | ValBaseInteger _ -> failwith "width of VInteger"
   | ValBaseUnion _ -> failwith "width of header union unimplemented"
-  | _ -> raise_s [%message "width of type unimplemented" ~v:(v: coq_ValueBase)]
+  | _ -> raise_s [%message "width of type unimplemented" ~v:Pretty.(fmt_string Prog.format_coq_ValueBase v)]
 
 let rec value_of_lvalue (reader : reader) (env : env) (st : 'a State.t)
     (lv : coq_ValueLvalue) : signal * coq_Value =
   let (MkValueLvalue (lv, _)) = lv in
   match lv with
-  | ValLeftName n -> SContinue, State.find_heap (Eval_env.find_val n env) st
+  | ValLeftName (n, _) -> SContinue, State.find_heap (Eval_env.find_val n env) st
   | ValLeftMember (lv, n) -> value_of_lmember reader st env lv n
   | ValLeftBitAccess (lv, hi, lo) -> value_of_lbit reader st env lv hi lo
   | ValLeftArrayAccess (lv, idx) -> value_of_larray reader st env lv idx
@@ -290,7 +291,7 @@ let rec assign_lvalue (reader : reader) (writer : writer) (st : 'a State.t)
     (env : env) (lhs : coq_ValueLvalue) (rhs : coq_ValueBase) : 'a State.t * signal =
   let MkValueLvalue (lval, _) = lhs in
   match lval with
-  | ValLeftName name ->
+  | ValLeftName (name, _) ->
     let l = Eval_env.find_val name env in
     State.insert_heap l (ValBase rhs) st, SContinue
   | ValLeftMember (lv, mname) ->

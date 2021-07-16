@@ -95,3 +95,6 @@ module Typed : sig
   val format_coq_P4Parameter : Format.formatter -> Typed.coq_P4Parameter -> unit
 end
   
+module Prog : sig
+  val format_coq_ValueBase : Format.formatter -> Prog.coq_ValueBase -> unit
+end

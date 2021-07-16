@@ -1,4 +1,6 @@
+open Poulet4.Typed
 open Typed
+open Poulet4.Syntax
 open Prog
 open Env
 open Target
@@ -40,10 +42,10 @@ module PreV1Switch (*: Target*) = struct
   type state = obj State.t
   type extern = state pre_extern
 
-  let read_header_field : coq_ValueBase reader = fun is_valid fields fname ->
+  let read_header_field : reader = fun is_valid fields fname ->
     List.Assoc.find_exn fields fname ~equal:P4string.eq
 
-  let write_header_field : coq_ValueBase writer = fun is_valid fields fname fvalue ->
+  let write_header_field : writer = fun is_valid fields fname fvalue ->
     let fs = List.map fields
       ~f:(fun (n,v) -> if P4string.eq n fname then n, fvalue else n, v) in
     ValBase (ValBaseHeader (fs, is_valid))
@@ -52,7 +54,7 @@ module PreV1Switch (*: Target*) = struct
 
   let eval_counter : extern = fun env st ts args ->
     let (loc, v, typ) = match args with 
-      | [(VRuntime {loc; _}, _);
+      | ValObj (ValObjVRuntime {loc; _}), _);
         (VBit {v; _},_);
         (VEnumField{enum_name; _}, _)] -> loc, v, enum_name
       | _ -> failwith "unexpected args for counter instantiation" in
