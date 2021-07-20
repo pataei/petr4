@@ -85,7 +85,8 @@ module MakeInterpreter (T : Target) = struct
 
   and eval_instantiation (ctrl : ctrl) (env : env) (st : state) (typ : coq_P4Type)
       (args : coq_Expression list) (name : P4string.t) : env * state =
-    let env' = Eval_env.set_namespace (Eval_env.get_namespace env ^ name.str) env in
+    let ns' = (Eval_env.get_namespace env).str ^ name.str in
+    let env' = Eval_env.set_namespace (P4string.dummy ns') env in
     let (st',_,obj) = eval_nameless env' st typ args in
     let env' = Eval_env.set_namespace (Eval_env.get_namespace env) env in
     let l = State.fresh_loc () in
@@ -103,35 +104,31 @@ module MakeInterpreter (T : Target) = struct
                     states)
     in
     let l = State.fresh_loc () in
-    let st = State.insert_heap l v st in 
+    let st = State.insert_heap l (ValObj v) st in 
     let env = Eval_env.insert_val_bare name l env in
     env, st
 
   and eval_control_decl (env : env) (st : state) (name : P4string.t)
       (constructor_params : coq_P4Parameter list) (params : coq_P4Parameter list)
       (locals : coq_Declaration list) (apply : coq_Block) : env * state =
-    let v = VControl {
-      cscope = env;
-      cconstructor_params = constructor_params;
-      cparams = params;
-      clocals = locals;
-      apply = apply;
-    } in
+    let v = ValObjControl (env, constructor_params, params, locals, apply) in
     let l = State.fresh_loc () in
-    let st = State.insert_heap l v st in
+    let st = State.insert_heap l (ValObj v) st in
     let env = Eval_env.insert_val_bare name l env in
     env, st
 
   and eval_fun_decl (env : env) (st : state) (name : P4string.t)
       (params : coq_P4Parameter list) (body : coq_Block) : env * state =
     let l = State.fresh_loc () in
-    let st = State.insert_heap l (VFun{scope=env;params;body}) st in
+    let fv = ValObjFun (params, ValFuncImplUser (env, body)) in
+    let st = State.insert_heap l (ValObj fv) st in
     Eval_env.insert_val_bare name l env, st
 
   and eval_extern_fun (env : env) (st : state) (name : P4string.t)
       (params : coq_P4Parameter list) : env * state =
     let l = State.fresh_loc () in
-    let st = State.insert_heap l (VExternFun {name; caller = None; params;}) st in
+    let fv = ValObjFun (params, ValFuncImplExtern (name, None)) in
+    let st = State.insert_heap l (ValObj fv) st in
     Eval_env.insert_val_bare name l env, st
 
   and eval_var_decl (ctrl : ctrl) (env : env) (st : state) (typ : coq_P4Type)
@@ -151,18 +148,29 @@ module MakeInterpreter (T : Target) = struct
          Eval_env.insert_val_bare name l env, st, SContinue
       | signal -> env, st, signal
 
+  and assert_raw_int (v: coq_Value) : bigint =
+    match v with
+    | ValBase b ->
+       begin match b with
+       | ValBaseInteger i
+       | ValBaseBit (_, i)
+       | ValBaseInt (_, i) -> i
+       | _ -> failwith "expected number"
+       end
+    | _ -> failwith "expected number"
+
   and eval_set_decl (ctrl : ctrl) (env : env) (st : state) (typ : coq_P4Type)
       (name : P4string.t) (size : coq_Expression) : env * state * signal =
     let env = Eval_env.insert_typ_bare name typ env in
     let (st, s, size') = eval_expr env st SContinue size in
-    let size'' = assert_rawint size' in
+    let size'' = assert_raw_int size' in
     match s with
     | SContinue ->
       let ms = snd ctrl in
       if Bigint.(Bigint.of_int (List.length ms) > size'')
       then failwith "too many elements inserted to value set"
       else
-        let vset = VSet (SValueSet{size=size';members=ms;sets=[]}) in
+        let vset = ValBase (ValBaseSet (ValSetValueSet (ValBaseInteger size'', ms, []))) in
         let l = State.fresh_loc () in
         let st = State.insert_heap l vset st in
         let env = Eval_env.insert_val_bare name l env in
@@ -174,58 +182,78 @@ module MakeInterpreter (T : Target) = struct
       (data_params : coq_P4Parameter list) (ctrl_params : coq_P4Parameter list)
       (body : coq_Block) : env * state =
     let l = State.fresh_loc () in
-    let st = State.insert_heap l
-      (VAction{scope=env; params = data_params @ ctrl_params; body}) st in
+    let v = ValObj (ValObjAction (env, data_params @ ctrl_params, body)) in
+    let st = State.insert_heap l v st in
     Eval_env.insert_val_bare name l env, st
 
   and eval_table_decl (ctrl : ctrl) (env : env) (st : state) (name : P4string.t)
-      (key : Table.key list) (actions : coq_TableActionRef list)
-      (entries : (Table.entry list) option) (default : coq_TableActionRef option)
-      (size : P4Int.t option) (props : Table.property list) : env * state =
-    let pre_ks = key |> List.map ~f:snd in
-    let ctrl_entries = match List.Assoc.find (fst (fst ctrl)) name ~equal:String.(=) with
-                       | None -> []
-                       | Some entries -> create_pre_entries env st actions key entries in
-    let entries' = match entries with
-                        | None -> ctrl_entries
-                        | Some entries -> entries |> List.map ~f:snd in
+      (key : coq_TableKey list) (actions : coq_TableActionRef list)
+      (entries : (coq_TableEntry list) option) (default : coq_TableActionRef option)
+      (size : Types.P4int.t option) (props : coq_TableProperty list) : env * state =
+    let ctrl_entries =
+      match List.Assoc.find (fst (fst ctrl)) name.str ~equal:String.(=) with
+      | None ->
+         []
+      | Some entries ->
+         create_pre_entries env st actions key entries
+    in
+    let entries' =
+      match entries with
+      | None -> ctrl_entries
+      | Some entries -> entries
+    in
     let final_entries = sort_priority ctrl env st entries' in
-    let ctrl_default = match List.Assoc.find (snd (fst ctrl)) name ~equal:String.(=) with
-                       | None -> default
-                       | Some actions' -> Some (convert_action env st   actions (List.hd_exn actions')) in
-    let v = VTable { name = name;
-                    keys = pre_ks;
-                    actions = actions;
-                    default_action = default_of_defaults ctrl_default;
-                    const_entries = final_entries; } in
+    let ctrl_default =
+      match List.Assoc.find (snd (fst ctrl)) name.str ~equal:String.(=) with
+      | None ->
+         default
+      | Some actions' ->
+         Some (convert_actions env st actions (List.hd_exn actions'))
+    in
+    let v = MkValTable (name,
+                        key,
+                        actions,
+                        default_of_defaults ctrl_default,
+                        final_entries)
+    in
     let l = State.fresh_loc () in
-    let st = State.insert_heap l v st in
+    let st = State.insert_heap l (ValObj (ValObjTable v)) st in
     (Eval_env.insert_val_bare name l env, st)
 
   and eval_senum_decl (env : env) (st : state) (name : P4string.t)
-      (ms : (P4String.t * coq_Expression) list) : env * state =
-    let ((st,_),es) = List.fold_map ms ~init:(st,SContinue)
-      ~f:(fun (st,s) (n,e) -> let (st,s,v) = eval_expr env st s e in (st,s), (snd n,v)) in
-    let v = VSenum es in
+      (ms : (P4string.t * coq_Expression) list) : env * state =
+    let eval_senum_decl_field (st, s) (n, e) =
+      let (st,s,v) = eval_expr env st s e in
+      match v with
+      | ValBase v -> (st,s), (n,v)
+      | _ -> failwith "serializable enum underlying values must be base values"
+    in
+    let ((st,_), es) =
+      List.fold_map ms
+        ~init:(st,SContinue)
+        ~f:eval_senum_decl_field
+    in
+    let v = ValBaseSenum es in
     let l = State.fresh_loc () in
-    let st = State.insert_heap l v st in
+    let st = State.insert_heap l (ValBase v) st in
     Eval_env.insert_val_bare name l env, st
 
   and eval_extern_obj (env : env) (st : state) (name : P4string.t)
-      (methods : MethodPrototype.t list) : env * state =
-    let v = let open MethodPrototype in methods
-      |> List.map ~f:snd
-      |> List.map ~f:(function Constructor {name; params;_}
-          | AbstractMethod {name; params; _}
-          | Method {name; params; _} -> snd name, params ) in
+      (methods : coq_MethodPrototype list) : env * state =
+    let v = List.map methods
+              ~f:(function ProtoConstructor (_, name, params)
+                         | ProtoAbstractMethod (_, _, name, _, params)
+                         | ProtoMethod (_, _, name, _, params) ->
+                            name, params )
+    in
     let l = State.fresh_loc () in
-    let st = State.insert_heap l (VExternObj v) st in
+    let st = State.insert_heap l (ValCons (ValConsExternObj v)) st in
     let env = Eval_env.insert_val_bare name l env in
     env, st
 
   and eval_pkgtyp_decl (env : env) (st : state) (name : P4string.t)
       (params : coq_P4Parameter list) : env * state =
-    let v = VPackage {params; args = []} in
+    let v = ValCons (ValConsPackage (params, [])) in
     let l = State.fresh_loc () in
     let st = State.insert_heap l v st in
     Eval_env.insert_val_bare name l env, st
@@ -238,17 +266,18 @@ module MakeInterpreter (T : Target) = struct
     match p with
     | None ->
       MkTableActionRef
-        (Info.dummy,
-         MkTablePreActionRef ([], BareName (Info.dummy, "NoAction"), []),
+        ((Info.dummy, []),
+         MkTablePreActionRef (BareName (P4string.dummy "NoAction"), []),
          TypAction ([], []))
       | Some action -> action
 
-  and match_params_to_args (params : coq_P4Parameter list) args : (Ast.number * coq_P4Type) option list =
+  and match_params_to_args (params : coq_P4Parameter list) (args: Ast.arg list) : (Ast.number * coq_P4Type) option list =
     match params with
     | p :: params ->
+       let (MkParameter (_, _, typ, _, var)) = p in
       let right_arg (name, value) =
-        if String.(snd p.variable = name)
-        then Some (value, p.typ)
+        if String.equal var.str name
+        then Some (value, typ)
         else None
       in
       let maybe_arg_for_p, other_args =
@@ -273,51 +302,49 @@ module MakeInterpreter (T : Target) = struct
       let num = s |> replace_wildcard |> int_of_string |> Bigint.of_int in
       let rec pre_expr_of_typ env (t : coq_P4Type) =
         match t with
-        | Integer -> Expression.Int (Info.dummy, {value = num; width_signed = None})
-        | Int {width} -> Expression.Int (Info.dummy, {value = num; width_signed = Some (width,true)})
-        | Bit {width} -> Expression.Int (Info.dummy, {value = num; width_signed = Some (width,false)})
-        | Bool -> Expression.Int (Info.dummy, {value = num; width_signed = None})
-        | TypeName n -> pre_expr_of_typ env (Eval_env.find_typ n env)
+        | TypInteger -> ExpInt {tags = (Info.dummy, []); value = num; width_signed = None}
+        | TypInt width -> ExpInt {tags = (Info.dummy, []); value = num; width_signed = Some (width,true)}
+        | TypBit width -> ExpInt {tags = (Info.dummy, []); value = num; width_signed = Some (width,false)}
+        | TypBool -> ExpInt {tags = (Info.dummy, []); value = num; width_signed = None}
+        | TypTypeName n -> pre_expr_of_typ env (Eval_env.find_typ n env)
         | _ -> failwith "unsupported type" in
       let pre_exp = pre_expr_of_typ env t in
-      let typed_exp : coq_Expressionyped_t = {expr = pre_exp; typ = t; dir = Directionless} in
-      let exp = (Info.dummy, typed_exp) in
+      let exp = MkExpression ((Info.dummy, []), pre_exp, t, Directionless) in
       if String.contains s '*'
-      then begin
-      let pre_exp' = Expression.Mask {expr = exp; mask = exp} in
-      let typed_exp' : coq_Expressionyped_t = {expr = pre_exp'; typ = Void; dir = Directionless} in
-      Some (Info.dummy, typed_exp') end
+      then let pre_exp' = ExpMask (exp, exp) in
+           Some (MkExpression ((Info.dummy, []), pre_exp', TypVoid, Directionless))
       else Some exp
   
-  and convert_action env st actions (name, args) =
-      let action_name' = Types.BareName (Info.dummy, name) in
+  and convert_actions env st (actions: coq_TableActionRef list) (name, args) =
+      let action_name' = BareName (P4string.dummy name) in
       let action_type = Eval_env.find_val action_name' env in
       let type_params = match action_type |> extract_from_state st with
-        | VAction {params;_} -> params
+        | ValObj (ValObjAction (env, params, block)) -> params
         | _ -> failwith "not an action type" in
-      let existing_args = List.fold_left actions
-                          ~f:(fun acc a -> if Types.name_eq (snd a).action.name action_name'
-                                           then (snd a).action.args
-                                           else acc)
-                          ~init:[] in
-      let ctrl_args = match_params_to_args type_params args |> List.map ~f:(convert_expression env) in
-      let pre_action_ref : Table.pre_action_ref =
-        { annotations = [];
-          name = action_name';
-          args = existing_args @ ctrl_args } in
-      let action : Table.typed_action_ref = { action = pre_action_ref; typ = Void } in (*type is a hack*)
-      (Info.dummy, action)
+      let convert_action acc action =
+        let (MkTableActionRef (_, (MkTablePreActionRef (name, args')), _)) = action in
+        if P4name.name_eq name action_name'
+        then args'
+        else acc
+      in
+      let existing_args =
+        List.fold_left actions ~f:convert_action ~init:[] in
+      let ctrl_args =
+        match_params_to_args type_params args
+        |> List.map ~f:(convert_expression env)
+      in
+      let pre_action_ref = MkTablePreActionRef (action_name', existing_args @ ctrl_args) in
+      MkTableActionRef ((Info.dummy, []), pre_action_ref, TypVoid)
 
   and create_pre_entries env st actions key add =
-    let convert_match ((name, (num_or_lpm : Ast.number_or_lpm)), t) : Match.t =
+    let convert_match ((name, (num_or_lpm : Ast.number_or_lpm)), t) : coq_Match =
       match num_or_lpm with
       | Num s ->
         let e = match convert_expression env (Some (s, t)) with
                 | Some e -> e
                 | None -> failwith "unreachable" in
-        let pre_match = Match.Expression {expr = e} in
-        let typed_match : Match.typed_t = {expr = pre_match; typ = Integer} in
-        (Info.dummy, typed_match)
+        let pre_match = MatchExpression e in
+        MkMatch ((Info.dummy, []), pre_match, TypInteger)
       | Slash (s, mask) ->
         let expr = match convert_expression env (Some (s, t)) with
                 | Some e -> e
@@ -325,36 +352,43 @@ module MakeInterpreter (T : Target) = struct
         let mask = match convert_expression env (Some (mask, t)) with
                 | Some e -> e
                 | None -> failwith "unreachable" in
-        let typed_mask : coq_Expressionyped_t =
-            { expr = Expression.Mask {expr; mask};
-              typ = Typed.Type.Set Typed.Type.Integer;
-              dir = Directionless }
+        let typed_mask =
+          MkExpression ((Info.dummy, []), ExpMask (expr, mask), TypSet TypInteger, Directionless)
         in
-        let match_ = Match.Expression {expr = Info.dummy, typed_mask} in
-        let typed_match : Match.typed_t = {expr = match_; typ = Integer} in
-        (Info.dummy, typed_match)
+        MkMatch ((Info.dummy, []), MatchExpression typed_mask, TypInteger)
     in
-    let convert_pre_entry (priority, match_list, (action_name, args), id) : Table.pre_entry =
-      let key_types = List.map key ~f:(fun k -> (snd (snd k).key).typ ) in
-      { annotations = [];
-        matches = List.map (List.zip_exn match_list key_types) ~f:convert_match;
-        action = convert_action env st actions (action_name, args) } in
+    let convert_pre_entry (priority, match_list, (action_name, args), id) : coq_TableEntry =
+      let key_type k =
+        let (MkTableKey (_, exp, _)) = k in
+        let (MkExpression (_, _, typ, _)) = exp in
+        typ
+      in
+      let key_types = List.map key ~f:key_type in
+      MkTableEntry ((Info.dummy, []), 
+                    List.map (List.zip_exn match_list key_types) ~f:convert_match,
+                    convert_actions env st actions (action_name, args)) in
     List.map add ~f:convert_pre_entry
 
   and sort_priority (ctrl : ctrl) (env : env) (st : state)
-    (entries : Table.pre_entry list) : coq_TableEntry list =
-    let priority_cmp (entry1 : Table.pre_entry) (entry2 : Table.pre_entry) =
-      let ann1 = List.find_exn entry1.annotations ~f:(fun a -> String.((snd a).name |> snd = "priority")) in
-      let ann2 = List.find_exn entry2.annotations ~f:(fun a -> String.((snd a).name |> snd = "priority")) in
+    (entries : coq_TableEntry list) : coq_TableEntry list =
+    let priority_cmp (entry1 : coq_TableEntry) (entry2 : coq_TableEntry) =
+      let (MkTableEntry ((_, annot1), _, MkTableActionRef (_, MkTablePreActionRef (name1, _), _))) = entry1 in
+      let (MkTableEntry ((_, annot2), _, MkTableActionRef (_, MkTablePreActionRef (name2, _), _))) = entry2 in
+      let ann1 = List.find_exn annot1 ~f:(fun a -> P4name.name_eq name1 (BareName (P4string.dummy "priority"))) in
+      let ann2 = List.find_exn annot2 ~f:(fun a -> P4name.name_eq name2 (BareName (P4string.dummy "priority"))) in
       let body1 = (snd ann1).body |> snd in
       let body2 = (snd ann2).body |> snd in
-      match body1,body2 with
+      match body1, body2 with
       | Unparsed [s1], Unparsed [s2] ->
-        let n1 = s1 |> snd |> int_of_string in
-        let n2 = s2 |> snd |> int_of_string in
+        let n1 = s1.str |> int_of_string in
+        let n2 = s2.str |> int_of_string in
         if n1 = n2 then 0 else if n1 < n2 then -1 else 1
       | _ -> failwith "wrong bodies for @priority" in
-    let (priority, no_priority) = List.partition_tf entries ~f:(fun e -> List.exists ~f:(fun a -> String.((snd a).name |> snd = "priority")) e.annotations) in
+    let (priority, no_priority) =
+      List.partition_tf entries
+        ~f:(fun (MkTableEntry ((_, annot), _, _)) ->
+          List.exists annot
+            ~f:(fun a -> P4string.eq (snd a).name (P4string.dummy "priority"))) in
     let sorted_priority = List.stable_sort priority ~compare:priority_cmp in
     sorted_priority @ no_priority
 
@@ -364,8 +398,8 @@ module MakeInterpreter (T : Target) = struct
 
   and eval_stmt (ctrl : ctrl) (env : env) (st : state) (sign : signal)
       (stm : coq_Statement) : (env * state * signal) =
-    match (snd stm).stmt with
-    | MethodCall{func;type_args;args} -> eval_method_call ctrl env st sign func type_args args
+    match stm with
+    | StmtMethodCall{func;type_args;args} -> eval_method_call ctrl env st sign func type_args args
     | Assignment{lhs;rhs}             -> eval_assign ctrl env st sign lhs rhs
     | DirectApplication{typ;args}     -> eval_app' ctrl env st sign args typ
     | Conditional{cond;tru;fls}       -> eval_cond ctrl env st sign cond tru fls
