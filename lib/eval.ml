@@ -14,6 +14,11 @@ let (>>|) v f = Option.map ~f:f v
 
 type env = Prog.coq_Env_EvalEnv
 
+let assert_base_val (v: coq_Value) : coq_ValueBase =
+  match v with
+  | ValBase v -> v
+  | _ -> failwith "expected base value"
+
 module type Interpreter = sig
 
   type state
@@ -398,17 +403,25 @@ module MakeInterpreter (T : Target) = struct
 
   and eval_stmt (ctrl : ctrl) (env : env) (st : state) (sign : signal)
       (stm : coq_Statement) : (env * state * signal) =
+    let (MkStatement (_, stm, _)) = stm in
     match stm with
-    | StmtMethodCall{func;type_args;args} -> eval_method_call ctrl env st sign func type_args args
-    | Assignment{lhs;rhs}             -> eval_assign ctrl env st sign lhs rhs
-    | DirectApplication{typ;args}     -> eval_app' ctrl env st sign args typ
-    | Conditional{cond;tru;fls}       -> eval_cond ctrl env st sign cond tru fls
-    | BlockStatement{block}           -> eval_block ctrl env st sign block
-    | Exit                            -> eval_exit env st sign
-    | EmptyStatement                  -> (env, st, sign)
-    | Return{expr}                    -> eval_return ctrl env st sign expr
-    | Switch{expr;cases}              -> eval_switch ctrl env st sign expr cases
-    | DeclarationStatement {decl}     -> eval_declaration_stm ctrl env st sign decl
+    | StatMethodCall (func, type_args, args) -> eval_method_call ctrl env st sign func type_args args
+    | StatAssignment(lhs,rhs)             -> eval_assign ctrl env st sign lhs rhs
+    | StatDirectApplication(typ,args)     -> eval_app' ctrl env st sign args typ
+    | StatConditional(cond,tru,fls)       -> eval_cond ctrl env st sign cond tru fls
+    | StatBlock(block)                    -> eval_block ctrl env st sign block
+    | StatExit                            -> eval_exit env st sign
+    | StatEmpty                  -> (env, st, sign)
+    | StatReturn(expr)                    -> eval_return ctrl env st sign expr
+    | StatSwitch(expr,cases)              -> eval_switch ctrl env st sign expr cases
+    | StatConstant (typ, name, value, _) ->
+      let env, state = eval_const_decl ctrl env st typ value name in
+      env, state, SContinue
+    | StatVariable (typ, name, expr, _) ->
+      eval_var_decl ctrl env st typ name expr
+    | StatInstantiation (typ, args, name, _) ->
+       let env, state = eval_instantiation ctrl env st typ args name in
+       env, state, SContinue
 
   and eval_method_call (ctrl : ctrl) (env : env) (st : state) (sign : signal)
       (func : coq_Expression) (targs : coq_P4Type list)
@@ -423,10 +436,11 @@ module MakeInterpreter (T : Target) = struct
     | SContinue ->
       let (st, s', v) = eval_expr env st SContinue rhs in
       let (st, s'', lv) = lvalue_of_expr env st s lhs in
-      begin match s',s'', lv with
-        | SContinue, SContinue, Some lv -> let (st, s) = assign_lvalue st env lv v in env, st, s
-        | SContinue, _, _               -> env, st, s''
-        | _, _, _                       -> env, st, s'
+      begin match s',s'', lv, v with
+      | SContinue, SContinue, Some lv, ValBase v -> let (st, s) = assign_lvalue st env lv v in
+                                                    env, st, s
+        | SContinue, _, _, _                     -> env, st, s''
+        | _, _, _, _                             -> env, st, s'
       end
     | SReject _
     | SReturn _
@@ -437,32 +451,35 @@ module MakeInterpreter (T : Target) = struct
     match s with
     | SContinue ->
       begin match v with
-        | VParser {pscope;pparams;plocals;states;_} ->
+        | ValObj (ValObjParser (pscope,pparams,plocals,states,_)) ->
           let (s, st') = eval_parser ctrl env st pparams args pscope plocals states in
-          (s, st', VNull)
-        | VControl {cscope;cparams;clocals;apply;_} ->
+          (s, st', ValBase ValBaseNull)
+        | ValObj (ValObjControl (cscope,cparams,clocals,apply,_)) ->
           let (st,s) = eval_control ctrl env st cparams args cscope clocals apply in
-          (st,s,VNull)
-        | VTable {keys;const_entries;name;actions;default_action} ->
-          eval_table ctrl env st keys const_entries name actions default_action
+          (st,s, ValBase ValBaseNull)
+        | ValObj (ValObjTable (MkValTable (name, keys, actions, default_action, const_entries))) ->
+          eval_table ctrl env st name keys actions default_action const_entries 
         | _ -> failwith "apply not implemented on type" end
-    | SReject _ | SReturn _ | SExit -> (st, s, VNull)
+    | SReject _ | SReturn _ | SExit -> (st, s, ValBase ValBaseNull)
 
-  and eval_table (ctrl : ctrl) (env : env) (st : state) (key : Table.pre_key list)
-      (entries : Table.pre_entry list)
-      (name : P4string.t) (actions : coq_TableActionRef list)
-      (default : coq_TableActionRef) : state * signal * coq_Value =
-    let ks = key |> List.map ~f:(fun k -> k.key) in
-    let mks = key |> List.map ~f:(fun k -> k.match_kind |> snd) in
+  and eval_table (ctrl : ctrl) (env : env) (st : state) (name : P4string.t)
+      (key : coq_TableKey list)
+      (actions : coq_TableActionRef list)
+      (default : coq_TableActionRef)
+      (entries : coq_TableEntry list)
+      : state * signal * coq_Value =
+    let ks = key |> List.map ~f:(fun (MkTableKey (_, key, _)) -> key) in
+    let mks = key |> List.map ~f:(fun (MkTableKey (_, _, mk)) -> mk.str) in
     let ((st',s), ks') = List.fold_map ks ~init:(st, SContinue)
         ~f:(fun (b, c) k ->
             let x,y,z = eval_expr env b c k in ((x,y),z)) in
     let f ((v,w,x,y),z) = ((v,w,x),(y,z)) in
     let sort_mks = check_lpm_count mks in
-    let ws = List.map ks' ~f:(width_of_val) in
+    let ws = List.map ks' ~f:(fun x -> x |> assert_base_val |> width_of_val) in
     let ((env, st'', s'),entries') =
       List.fold_map entries ~init:(env,st',s)
-        ~f:(fun (a,b,c) d -> (set_of_matches ctrl a b c d.matches ws, d.action) |> f) in
+        ~f:(fun (a,b,c) (MkTableEntry (_, matches, action)) ->
+          (set_of_matches ctrl a b c matches ws, action) |> f) in
     let (entries'', ks'') = if List.equal String.equal mks ["lpm"] then (sort_lpm entries', ks')
       else if sort_mks then filter_lpm_prod st env mks ks' entries'
       else (entries', ks') in
@@ -470,20 +487,17 @@ module MakeInterpreter (T : Target) = struct
     let action = match l with
                 | [] -> default
                 | _ -> List.hd_exn l |> snd in
-    let action_name = Table.((snd action).action.name) in
+    let (MkTableActionRef (_, MkTablePreActionRef (action_name, args), _)) = action in
     let action_value = Eval_env.find_val action_name env |> extract_from_state st'' in
-    let args = Table.((snd action).action.args) in
     match action_value with
-    | VAction{scope;params;body}  ->
+    | ValObj (ValObjAction(scope,params,body))  ->
       let (st''',s,_) = eval_funcall' env st'' scope params args body in
-      let hit_bool = VBool (not (List.is_empty l)) in
-      let miss_bool = VBool (List.is_empty l) in
-      let run_enum = VEnumField{typ_name=name; enum_name=name_only action_name} in
-      let v = VStruct {fields=[
-                            ("hit", hit_bool);
-                            ("miss", miss_bool);
-                            ("action_run", run_enum)
-                          ]} in
+      let hit_bool = ValBaseBool (not (List.is_empty l)) in
+      let miss_bool = ValBaseBool (List.is_empty l) in
+      let run_enum = ValBaseEnumField(name, name_only action_name) in
+      let v = ValBase (ValBaseStruct [P4string.dummy "hit", hit_bool;
+                                      P4string.dummy "miss", miss_bool;
+                                      P4string.dummy "action_run", run_enum]) in
       (st''',s,v)
     | _ -> failwith "table expects an action"
 
@@ -494,7 +508,7 @@ module MakeInterpreter (T : Target) = struct
       | None -> failwith "unreachable, should have lpm"
       | Some (i,_) -> i in
     let f = function
-      | SProd l, a -> (List.nth_exn l index, a)
+      | ValSetProd l, a -> (List.nth_exn l index, a)
       | _ -> failwith "not lpm prod" in
     let entries =
       entries
@@ -512,11 +526,16 @@ module MakeInterpreter (T : Target) = struct
     then failwith "more than one lpm"
     else num_lpm = 1
 
+  and assert_lpm (s: coq_ValueSet) : coq_ValueBase * int * coq_ValueBase =
+    match s with
+    | ValSetLpm (width, nbits, value) -> width, nbits, value
+    | _ -> failwith "expected ValSetLpm"
+
   and sort_lpm (entries : (coq_ValueSet * coq_TableActionRef) list)
       : (coq_ValueSet * coq_TableActionRef) list =
     let entries' = List.map entries ~f:(fun (x,y) -> lpm_set_of_set x, y) in
     let (entries'', uni) =
-      match List.findi entries' ~f:(fun i (s,_) -> Poly.(s = SUniversal)) with
+      match List.findi entries' ~f:(fun i (s,_) -> Poly.(s = ValSetUniversal)) with
       | None -> (entries', None)
       | Some (i,_) ->
         let es = List.filteri entries' ~f:(fun ind _ -> ind < i) in
@@ -525,8 +544,8 @@ module MakeInterpreter (T : Target) = struct
     let compare (s1,_) (s2,_) =
       let (_,n1,_) = assert_lpm s1 in
       let (_,n2,_) = assert_lpm s2 in
-      if Bigint.(n1 = n2) then 0
-      else if Bigint.(n1 > n2) then -1
+      if (n1 = n2) then 0
+      else if (n1 > n2) then -1
       else 1 in
     let sorted = List.sort entries'' ~compare:compare in
     match uni with
@@ -535,14 +554,17 @@ module MakeInterpreter (T : Target) = struct
 
   and lpm_set_of_set (s : coq_ValueSet) : coq_ValueSet =
     match s with
-    | SSingleton{w;v} ->
-      let v' = bitwise_neg_of_bigint Bigint.zero w in
-      SLpm{w=VBit{w;v};nbits=w;v=VBit{w;v=v'}}
-    | SMask{v=v1;mask=v2} ->
-      SLpm{w=v1;nbits=v2 |> bigint_of_val |> bits_of_lpmmask Bigint.zero false;v=v2}
-    | SProd l -> List.map l ~f:lpm_set_of_set |> SProd
-    | SUniversal | SLpm _ -> s
-    | SRange _ | SValueSet _ -> failwith "unreachable"
+    | ValSetSingleton(v) ->
+       let w = width_of_val v in
+      ValSetLpm(ValBaseBit(32,Bigint.of_int w), w, v)
+    | ValSetMask(v1, v2) ->
+       ValSetLpm(v1, v2
+                     |> Checker.bigint_of_value_base_exn
+                     |> bits_of_lpmmask Bigint.zero false
+                     |> Bigint.to_int_exn, v2)
+    | ValSetProd l -> List.map l ~f:lpm_set_of_set |> ValSetProd
+    | ValSetUniversal | ValSetLpm _ -> s
+    | ValSetRange _ | ValSetValueSet _ -> failwith "unreachable"
 
   and bits_of_lpmmask (acc : Bigint.t) (b : bool) (v : Bigint.t) : Bigint.t =
     let two = Bigint.(one + one) in
@@ -558,7 +580,8 @@ module MakeInterpreter (T : Target) = struct
     let (st', sign', v) = eval_nameless env st t  [] in
     let typname = name_only (name_of_type_ref t) in
     let args' = List.map ~f:(fun arg -> Some arg) args in
-    let env'' = Eval_env.set_namespace (Eval_env.get_namespace env ^ typname) env in
+    let ns' = (Eval_env.get_namespace env).str ^ typname.str |> P4string.dummy in
+    let env'' = Eval_env.set_namespace ns' env in
     let (st'', sign'', _) = eval_app ctrl env'' st' sign' v args' in
     (Eval_env.set_namespace (Eval_env.get_namespace env) env'', st'', sign'')
 
@@ -569,12 +592,12 @@ module MakeInterpreter (T : Target) = struct
       match s' with
       | SReject _ -> (env, st', s')
       | SContinue ->
-        begin match v with
-          | VBool true  ->
+        begin match assert_base_val v with
+          | ValBaseBool true  ->
             tru
             |> eval_stmt ctrl (Eval_env.push_scope env) st' SContinue
             |> Tuple.T3.map_fst ~f:(fun _ -> env)
-          | VBool false ->
+          | ValBaseBool false ->
             begin match fls with
               | None -> (env, st', SContinue)
               | Some fls' ->
@@ -588,14 +611,19 @@ module MakeInterpreter (T : Target) = struct
     | SContinue -> eval_cond' env cond tru fls
     | SReject _ | SReturn _ | SExit -> (env, st, sign)
 
+  and list_of_block (b: coq_Block) : coq_Statement list =
+    match b with
+    | BlockEmpty _ -> []
+    | BlockCons (stmt, b') -> stmt :: list_of_block b'
+
   and eval_block (ctrl : ctrl) (env : env) (st : state) (sign :signal)
       (block : coq_Block) : (env * state * signal) =
-    let block = snd block in
+    let stmts = list_of_block block in
     let f (env,st,sign) stm =
       match sign with
       | SContinue -> eval_stmt ctrl env st sign stm
       | SReject _ | SReturn _ | SExit -> (env, st, sign) in
-    block.statements
+    stmts
     |> List.fold_left ~init:(Eval_env.push_scope env,st,sign) ~f:f
     |> Tuple.T3.map_fst ~f:(fun _ -> env)
 
@@ -610,7 +638,7 @@ module MakeInterpreter (T : Target) = struct
       (expr : coq_Expression option) : env * state * signal =
     let (st', s', v) =
       match expr with
-      | None   -> (st, SContinue, VNull)
+      | None   -> (st, SContinue, ValBase ValBaseNull)
       | Some e -> eval_expr env st SContinue e in
     match sign with
     | SReject _ | SReturn _ | SExit -> (env,st,sign)
@@ -619,9 +647,13 @@ module MakeInterpreter (T : Target) = struct
       | SReject _ -> (env, st', s')
       | SReturn _ | SExit -> failwith "unreachable" end
 
+  and assert_enum_field (v: coq_Value) =
+    match v with
+    | ValBase (ValBaseEnumField (typ_name, enum_name)) -> typ_name, enum_name
+    | _ -> failwith "expected enum field"
+
   and eval_switch (ctrl : ctrl) (env : env) (st : state) (sign : signal) (expr : coq_Expression)
-      (cases : Statement.switch_case list) : env * state * signal =
-    let open Statement in
+      (cases : coq_StatementSwitchCase list) : env * state * signal =
     let (st',s',v) = eval_expr env st SContinue expr in
     match sign with
     | SReject _ | SReturn _ | SExit -> (env, st, sign)
@@ -629,17 +661,22 @@ module MakeInterpreter (T : Target) = struct
       | SReject _ -> (env, st', s')
       | SContinue ->
         let s = assert_enum_field v |> snd in
-        let matches = cases
-          |> List.map ~f:snd
-          |> List.group ~break:(fun x _ -> match x with Action _ -> true | _ -> false)
+        let matches =
+          cases
+          |> List.group ~break:(fun x _ ->
+                 match x with
+                 | StatSwCaseAction _ -> true
+                 | _ -> false)
           |> List.filter ~f:(fun l -> List.exists l ~f:(label_matches_string s)) in
         begin match matches with
           | [] -> (env, st', s')
           | hd::tl -> hd
-            |> List.filter ~f:(function Action _ -> true | _ -> false)
-            |> List.hd_exn
-            |> (function Action{label;code} -> code | _ -> failwith "unreachable")
-            |> eval_block ctrl env st' SContinue
+                      |> List.filter ~f:(function StatSwCaseAction _ -> true | _ -> false)
+                      |> List.hd_exn
+                      |> (function
+                          | StatSwCaseAction(_, label, code) -> code
+                          | _ -> failwith "unreachable")
+                      |> eval_block ctrl env st' SContinue
         end
       | _ -> failwith "unreachable"
 
