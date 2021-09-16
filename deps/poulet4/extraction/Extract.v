@@ -31,8 +31,12 @@ Extract Inlined Constant Nat.add => "(+)".
 
 Require Poulet4.Syntax.
 Require Poulet4.Typed.
+Require Poulet4.Ops.
 
-
-Separate Extraction Poulet4.Syntax
-         Poulet4.Typed Poulet4.SimplExpr
+Separate Extraction
+         Coq.Classes.EquivDec
+         Poulet4.Syntax
+         Poulet4.Typed
+         Poulet4.Ops
+         Poulet4.SimplExpr
          Poulet4.GenLoc.
