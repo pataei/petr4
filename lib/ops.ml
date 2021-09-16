@@ -2,15 +2,17 @@ open Core_kernel
 open Typed
 open Prog
 
-let interp_binary_op (op: coq_OpBin) (l: coq_ValueBase) (r: coq_ValueBase) =
-  Poulet4.Ops.eval_binop
+let bigint_to_bool_list (b: Bigint.t) : bool list =
+  failwith "bigint_to_bool_list unimplemented"
 
+let bool_list_to_bigint (b: bool list) :  Bigint.t =
+  failwith "bool_list_to_bigint unimplemented"
+
+let interp_binary_op (op: coq_OpBin) (l: coq_ValueBase) (r: coq_ValueBase) =
+  Poulet4.Ops.Ops.eval_binary_op op l r
 
 let interp_unary_op (op: coq_OpUni) (v: coq_ValueBase) =
-  match op with
-  | Not    -> eval_not v
-  | BitNot -> eval_bitnot v
-  | UMinus -> eval_uminus v
+  Poulet4.Ops.Ops.eval_unary_op op v
 
 (*----------------------------------------------------------------------------*)
 (* Cast evaluation                                                            *)
@@ -23,6 +25,9 @@ let bit_of_val (width : int) (v : coq_ValueBase) : coq_ValueBase =
   failwith "unimplemented"
 
 let int_of_val (width : int) (v : coq_ValueBase) : coq_ValueBase =
+  failwith "unimplemented"
+
+let bigint_of_val (v : coq_Value) : Bigint.t =
   failwith "unimplemented"
 
 let fields_for_cast (fields: Typed.coq_FieldType list) (value: coq_ValueBase) =

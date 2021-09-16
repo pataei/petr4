@@ -468,14 +468,14 @@ let rec print_value_base p (value : coq_ValueBase)=
           print_bigint n
   | ValBaseBit value ->
       fprintf p "(@[<hov 4>ValBaseBit@ %a)@]" 
-        print_bigint (Checker.bool_list_to_bigint value)
+        print_bigint (Ops.bool_list_to_bigint value)
   | ValBaseInt value ->
       fprintf p "(@[<hov 4>ValBaseInt@ %a)@]" 
-        print_bigint (Checker.bool_list_to_bigint value)
+        print_bigint (Ops.bool_list_to_bigint value)
   | ValBaseVarbit (max, value) ->
       fprintf p "(@[<hov 4>ValBaseVarbit@ %a@ %a)@]" 
           print_bigint max
-          print_bigint (Checker.bool_list_to_bigint value)
+          print_bigint (Ops.bool_list_to_bigint value)
   | ValBaseString s ->
       fprintf p "(@[<hov 0>ValBaseString@ %a)@]" 
           p4string s

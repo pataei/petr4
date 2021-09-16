@@ -184,12 +184,6 @@ and min_size_in_bytes env info hdr_type =
   let bits = min_size_in_bits' env info hdr_type in
   Bigint.of_int ((bits + 7) asr 3)
 
-and bigint_to_bool_list (b: Bigint.t) : bool list =
-  failwith "bigint_to_bool_list unimplemented"
-
-and bool_list_to_bigint (b: bool list) :  Bigint.t =
-  failwith "bool_list_to_bigint unimplemented"
-
 (* Evaluate the expression [expr] at compile time. Make sure to
  * typecheck the expression before trying to evaluate it! *)
 and compile_time_eval_expr (env: Checker_env.t) (expr: Prog.coq_Expression) : Prog.coq_ValueBase option =
@@ -208,20 +202,20 @@ and compile_time_eval_expr (env: Checker_env.t) (expr: Prog.coq_Expression) : Pr
         Some (ValBaseInteger i.value)
       | Some (width, signed) ->
         if signed
-        then Some (ValBaseInt (bigint_to_bool_list i.value))
-        else Some (ValBaseBit (bigint_to_bool_list i.value))
+        then Some (ValBaseInt (Ops.bigint_to_bool_list i.value))
+        else Some (ValBaseBit (Ops.bigint_to_bool_list i.value))
     end
   | ExpUnaryOp (op, arg) ->
     begin match compile_time_eval_expr env arg with
       | Some arg ->
-        Some (Ops.interp_unary_op op arg)
+         Ops.interp_unary_op op arg
       | None -> None
     end
   | ExpBinaryOp (op, (l, r)) ->
     begin match compile_time_eval_expr env l,
                 compile_time_eval_expr env r with
     | Some l, Some r ->
-      Some (Ops.interp_binary_op op l r)
+      Ops.interp_binary_op op l r
     | _ -> None
     end
   | ExpCast (typ, expr) ->
@@ -303,7 +297,7 @@ and bigint_of_value_base (v: Prog.coq_ValueBase) =
   match v with
   | ValBaseInt v
   | ValBaseBit v ->
-    Some (bool_list_to_bigint v)
+    Some (Ops.bool_list_to_bigint v)
   | ValBaseInteger v ->
      Some v
   | _ -> None
