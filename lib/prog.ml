@@ -6,7 +6,6 @@ include Poulet4.Syntax
 type coq_MethodPrototype = Types.tag Poulet4.Syntax.coq_MethodPrototype
 type coq_Locator = Types.tag Poulet4.Syntax.coq_Locator
 let noLocator = LGlobal []
-type coq_KeyValue = Types.tag Poulet4.Syntax.coq_KeyValue
 type coq_ExpressionPreT = Types.tag Poulet4.Syntax.coq_ExpressionPreT
 type coq_Expression = Types.tag Poulet4.Syntax.coq_Expression
 type coq_MatchPreT = Types.tag Poulet4.Syntax.coq_MatchPreT
@@ -16,7 +15,7 @@ type coq_TableActionRef = Types.tag Poulet4.Syntax.coq_TableActionRef
 type coq_TableKey = Types.tag Poulet4.Syntax.coq_TableKey
 type coq_TableEntry = Types.tag Poulet4.Syntax.coq_TableEntry
 type coq_TableProperty = Types.tag Poulet4.Syntax.coq_TableProperty
-type coq_ValueBase = Types.tag Poulet4.Syntax.coq_ValueBase
+type coq_ValueBase = (Types.tag, bool) Poulet4.Syntax.coq_ValueBase
 type coq_ValueSet = Types.tag Poulet4.Syntax.coq_ValueSet
 type coq_StatementSwitchLabel = Types.tag Poulet4.Syntax.coq_StatementSwitchLabel
 type coq_StatementSwitchCase = Types.tag Poulet4.Syntax.coq_StatementSwitchCase
@@ -37,7 +36,7 @@ type coq_ValueLvalue = Types.tag Poulet4.Syntax.coq_ValueLvalue
 type coq_ValueFunctionImplementation = Types.tag Poulet4.Syntax.coq_ValueFunctionImplementation
 type coq_ValueObject = Types.tag Poulet4.Syntax.coq_ValueObject
 type coq_ValueConstructor = Types.tag Poulet4.Syntax.coq_ValueConstructor
-type coq_Value = Types.tag Poulet4.Syntax.coq_Value
+type coq_Value = (Types.tag, bool) Poulet4.Syntax.coq_Value
 type program = Types.tag Poulet4.Syntax.program
   
 

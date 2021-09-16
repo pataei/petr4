@@ -57,9 +57,9 @@ Section Syntax.
 
   Definition NoLocator := LGlobal nil.
 
-  Inductive KeyValue :=
-  | MkKeyValue (tags: tags_t) (key: P4String) (value: Expression)
-  with ExpressionPreT :=
+  (* Inductive KeyValue :=
+  | MkKeyValue (tags: tags_t) (key: P4String) (value: Expression) *)
+  Inductive ExpressionPreT :=
   | ExpBool (b: bool)
   | ExpInt (_: P4Int)
   | ExpString (_: P4String)
@@ -67,7 +67,7 @@ Section Syntax.
   | ExpArrayAccess (array: Expression) (index: Expression)
   | ExpBitStringAccess (bits: Expression) (lo: N) (hi: N)
   | ExpList (value: list Expression)
-  | ExpRecord (entries: list KeyValue)
+  | ExpRecord (entries: P4String.AList tags_t Expression)
   | ExpUnaryOp (op: OpUni) (arg: Expression)
   | ExpBinaryOp (op: OpBin) (args: (Expression * Expression))
   | ExpCast (typ: @P4Type tags_t) (expr: Expression)
@@ -111,35 +111,35 @@ Section Syntax.
   | MkTableProperty (tags: tags_t)  (const: bool)
                     (name: P4String) (value: Expression).
 
-  Inductive ValueBase :=
+  (* little-endian *)
+  Inductive ValueBase {bit : Type} :=
   | ValBaseNull
-  | ValBaseBool (_: bool)
+  | ValBaseBool (_: bit)
   | ValBaseInteger (_: Z)
-  | ValBaseBit (width: nat) (value: Z)
-  | ValBaseInt (width: nat) (value: Z)
-  | ValBaseVarbit (max: nat) (width: nat) (value: Z)
+  | ValBaseBit (value: list bit)
+  | ValBaseInt (value: list bit)
+  | ValBaseVarbit (max: N) (value: list bit)
   | ValBaseString (_: P4String)
-  | ValBaseTuple (_: list ValueBase)
-  | ValBaseRecord (_: P4String.AList tags_t ValueBase)
-  | ValBaseSet (_: ValueSet)
+  | ValBaseTuple (_: list (@ValueBase bit))
+  | ValBaseRecord (_: P4String.AList tags_t (@ValueBase bit))
   | ValBaseError (_: P4String)
   | ValBaseMatchKind (_: P4String)
-  | ValBaseStruct (fields: P4String.AList tags_t ValueBase)
-  | ValBaseHeader (fields: P4String.AList tags_t ValueBase) (is_valid: bool)
-  | ValBaseUnion (fields: P4String.AList tags_t ValueBase)
-  | ValBaseStack (headers: list ValueBase) (size: nat) (next: nat)
+  | ValBaseStruct (fields: P4String.AList tags_t (@ValueBase bit))
+  | ValBaseHeader (fields: P4String.AList tags_t (@ValueBase bit)) (is_valid: bit)
+  | ValBaseUnion (fields: P4String.AList tags_t (@ValueBase bit))
+  | ValBaseStack (headers: list (@ValueBase bit)) (size: N) (next: N)
   | ValBaseEnumField (typ_name: P4String) (enum_name: P4String)
-  | ValBaseSenumField (typ_name: P4String) (enum_name: P4String) (value: ValueBase)
-  | ValBaseSenum (_: P4String.AList tags_t ValueBase)
-  with ValueSet :=
-  | ValSetSingleton (value: ValueBase)
+  | ValBaseSenumField (typ_name: P4String) (enum_name: P4String) (value: (@ValueBase bit))
+  | ValBaseSenum (_: P4String.AList tags_t (@ValueBase bit)).
+
+  Inductive ValueSet:=
+  | ValSetSingleton (value: (@ValueBase bool))
   | ValSetUniversal
-  | ValSetMask (value: ValueBase) (mask: ValueBase)
-  | ValSetRange (lo: ValueBase) (hi: ValueBase)
+  | ValSetMask (value: (@ValueBase bool)) (mask: (@ValueBase bool))
+  | ValSetRange (lo: (@ValueBase bool)) (hi: (@ValueBase bool))
   | ValSetProd (_: list ValueSet)
-  | ValSetLpm (width: ValueBase) (nbits: nat) (value: ValueBase)
-  | ValSetValueSet (size: ValueBase) (members: list (list Match))
-                   (sets: list ValueSet).
+  | ValSetLpm (nbits: N) (value: (@ValueBase bool))
+  | ValSetValueSet (size: N) (members: list (list Match)) (sets: list ValueSet).
 
   Inductive StatementSwitchLabel :=
   | StatSwLabDefault (tags: tags_t)
@@ -169,7 +169,7 @@ Section Syntax.
   | StatSwitch (expr: Expression)
                (cases: list StatementSwitchCase)
   | StatConstant  (typ: @P4Type tags_t)
-                  (name: P4String) (value: ValueBase)
+                  (name: P4String) (value: @ValueBase bool)
                   (loc: Locator)
   | StatVariable  (typ: @P4Type tags_t)
                   (name: P4String) (init: option Expression)
@@ -343,7 +343,7 @@ Section Syntax.
 
   Inductive Declaration :=
   | DeclConstant (tags: tags_t)  (typ: @P4Type tags_t)
-                 (name: P4String) (value: ValueBase)
+                 (name: P4String) (value: @ValueBase bool)
   | DeclInstantiation (tags: tags_t)  (typ: @P4Type tags_t)
                       (args: list Expression) (name: P4String) (init: option Block)
   | DeclParser (tags: tags_t)  (name: P4String)
@@ -362,14 +362,14 @@ Section Syntax.
   | DeclVariable (tags: tags_t)  (typ: @P4Type tags_t)
                  (name: P4String) (init: option Expression)
   | DeclValueSet (tags: tags_t)  (typ: @P4Type tags_t)
-                 (size: Expression) (name: P4String)
+                 (size: N) (name: P4String)
   | DeclAction (tags: tags_t)  (name: P4String)
                (data_params: list (@P4Parameter tags_t)) (ctrl_params: list (@P4Parameter tags_t))
                (body: Block)
   | DeclTable (tags: tags_t)  (name: P4String)
               (key: list TableKey) (actions: list TableActionRef)
               (entries: option (list TableEntry))
-              (default_action: option TableActionRef) (size: option P4Int)
+              (default_action: option TableActionRef) (size: option N)
               (custom_properties: list TableProperty)
   | DeclHeader (tags: tags_t)  (name: P4String)
                (fields: list DeclarationField)
@@ -419,8 +419,8 @@ Section Syntax.
   Inductive ValuePreLvalue :=
   | ValLeftName (name: @Typed.name tags_t) (loc: Locator)
   | ValLeftMember (expr: ValueLvalue) (name: P4String)
-  | ValLeftBitAccess (expr: ValueLvalue) (msb: nat) (lsb: nat)
-  | ValLeftArrayAccess (expr: ValueLvalue) (idx: nat)
+  | ValLeftBitAccess (expr: ValueLvalue) (msb: N) (lsb: N)
+  | ValLeftArrayAccess (expr: ValueLvalue) (idx: N)
   with ValueLvalue :=
   | MkValueLvalue (lvalue: ValuePreLvalue) (typ: @P4Type tags_t).
 
@@ -456,8 +456,8 @@ Section Syntax.
   | ValConsPackage (params: list (@P4Parameter tags_t)) (args: P4String.AList tags_t ValueLoc)
   | ValConsExternObj (_: P4String.AList tags_t (list (@P4Parameter tags_t))).
 
-  Inductive Value :=
-  | ValBase (_: ValueBase)
+  Inductive Value (bit : Type) :=
+  | ValBase (_: @ValueBase bit)
   | ValObj (_: ValueObject)
   | ValCons (_: ValueConstructor).
 

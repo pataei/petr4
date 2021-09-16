@@ -1,7 +1,4 @@
-Require Export Coq.Classes.EquivDec.
-
-Require Import Poulet4.Monads.Monad.
-Require Import Poulet4.Monads.Option.
+Require Import Poulet4.P4cub.Util.Utiliser.
 
 Declare Custom Entry p4env.
 
@@ -43,7 +40,16 @@ Section EnvDefs.
   Definition scope_shadow (e1 e2 : t D T) : t D T :=
     e1 ++ e2.
   (**[]*)
-
+  
+  (** Gather values given a list of keys. *)
+  Definition gather (e: t D T) : list D -> list T :=
+    List.fold_right
+      (fun k acc =>
+         match find k e with
+         | Some v => v :: acc
+         | None => acc
+         end) [].
+  
   Fixpoint keys (e: t D T) : list D := 
     match e with 
     | nil => nil
@@ -54,14 +60,91 @@ Section EnvDefs.
       | _ => keys'
       end
     end.
-  (* TODO: whatever lemmas needed. *)
+
+  Section Lemmas.
+    Local Hint Extern 0 => simpl_equiv_dec : core.
+    Local Hint Extern 0 => simpl_equiv_dec_hyp : core.
+    
+    Lemma bind_sound : forall x v e,
+      find x (bind x v e) = Some v.
+    Proof.
+      intros; simpl; auto.
+    Qed.
+    
+    Lemma bind_complete : forall x y v e,
+        ~ equiv_rel x y ->
+        find x e = find x (bind y v e).
+    Proof.
+      intros; simpl; auto.
+    Qed.
+
+    Lemma bind_twice : forall x y v v' e,
+        find y (bind x v (bind x v' e)) = find y (bind x v e).
+    Proof.
+      intros; simpl; destruct_if; auto.
+    Qed.
+
+    Lemma bind_diff_comm : forall x y z u v e,
+        ~ equiv_rel x y ->
+        find z (bind x u (bind y v e)) = find z (bind y v (bind x u e)).
+    Proof.
+      intros; simpl;
+        repeat (destruct_if; auto).
+      assert (equiv_rel x z) by (symmetry; assumption).
+      assert (equiv_rel x y) by (etransitivity; eauto).
+      contradiction.
+    Qed.
+  End Lemmas.
 End EnvDefs.
 
-Definition map_keys {D T D'} (f: D -> D') : t D T -> t D' T :=
-  List.map (fun '(k, v) => (f k, v)).
+Section MapKeys.
+  Context {A B T : Type}.
+  Variable (f : A -> B).
+  
+  Definition map_keys : t A T -> t B T :=
+    List.map (fun '(k, v) => (f k, v)).
 
-Definition map_vals {D T T'} (f: T -> T') : t D T -> t D T' :=
-  List.map (fun '(k, v) => (k, f v)).
+  Context {EA : EqDec A eq}.
+  Context {EB : EqDec B eq}.
+  Hypothesis Hfinj : forall a1 a2, f a1 = f a2 -> a1 = a2.
+
+  Local Hint Extern 0 => simpl_equiv_dec : core.
+  Local Hint Extern 0 => simpl_equiv_dec_hyp : core.
+  
+  Lemma map_keys_find_injective : forall e a,
+      find (f a) (map_keys e) = find a e.
+  Proof.
+    intro e;
+      induction e as [| [k v] e IHe];
+      intros a; unravel in *; try reflexivity.
+    repeat (destruct_if; auto);
+      subst; intuition.
+  Qed.
+End MapKeys.
+
+Section MapVals.
+  Context {D U V : Type}.
+  Variable (f : U -> V).
+  
+  Definition map_vals : t D U -> t D V :=
+    List.map (fun '(k, v) => (k, f v)).
+
+  Context {R : D -> D -> Prop}.
+  Context {RE: Equivalence R}.
+  Context {RED: EqDec D R}.
+
+  Local Hint Extern 0 => simpl_equiv_dec : core.
+  Local Hint Extern 0 => simpl_equiv_dec_hyp : core.
+
+  Lemma map_vals_find : forall e d,
+      find d (map_vals e) = find d e >>| f.
+  Proof.
+    intro e;
+      induction e as [| [k u] e IHe];
+      intros d; unravel in *; try reflexivity;
+        repeat (destruct_if; auto).
+  Qed.
+End MapVals.
 
 Module EnvNotations.
   Notation "'!{' env '}!'" := env (env custom p4env at level 99).
