@@ -30,6 +30,9 @@ let int_of_val (width : int) (v : coq_ValueBase) : coq_ValueBase =
 let bigint_of_val (v : coq_Value) : Bigint.t =
   failwith "unimplemented"
 
+let bits_of_val (v: coq_Value) : bool list =
+  failwith "unimplemented"
+
 let fields_for_cast (fields: Typed.coq_FieldType list) (value: coq_ValueBase) =
   match value with
   | ValBaseTuple vals ->
