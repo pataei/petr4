@@ -760,17 +760,32 @@ module MakeInterpreter (T : Target) = struct
           eval_funcall ctrl env st func type_args args
       | ExpNamelessInstantiation (typ, args) ->
          eval_nameless env st typ args
-      | ExpMask (expr, mask) ->
-         eval_mask env st expr mask
-      | ExpRange (lo, hi) ->
-         eval_range env st lo hi
       | ExpDontCare ->
          st, s, ValBase ValBaseNull
+      | ExpMask _
+      | ExpRange _ -> failwith "set in expression context?"
       end
     | SReject _ -> (st, s, ValBase ValBaseNull)
     | SReturn _ -> failwith "expression should not return"
     | SExit -> failwith "expresion should not exit"
 
+  and eval_set_expr (env : env) (st : state) (s : signal)
+(exp : coq_Expression) : state * signal * coq_ValueSet =
+    match s with
+    | SReject _ -> (st, s, ValSetUniversal)
+    | SReturn _ -> failwith "expression should not return"
+    | SExit -> failwith "expresion should not exit"
+    | SContinue ->
+       let MkExpression (_, expr, _, _) = exp in
+       match expr with
+       | ExpMask (expr, mask) ->
+          eval_mask env st expr mask
+       | ExpRange (lo, hi) ->
+          eval_range env st lo hi
+       | _ ->
+          let state, signal, value = eval_expr env st s exp in
+          state, signal, ValSetSingleton (assert_base_val value)
+  
   and eval_name (env : env) (st : state) (name : Types.P4name.t)
       (exp : coq_Expression) : state * signal * coq_Value =
     let s = SContinue in
@@ -799,7 +814,6 @@ module MakeInterpreter (T : Target) = struct
   and eval_bitstring_access (env : env) (st : state) (b : coq_Expression)
       (m : Bigint.t) (l : Bigint.t) : state * signal * coq_Value =
     let (st', s, b) = eval_expr env st SContinue b in
-    let w = Bigint.(m-l + one) in
     let n = bitstring_slice (Ops.bits_of_val b) (Bigint.to_int_exn m) (Bigint.to_int_exn l) in
     match s with
     | SContinue -> (st', SContinue, ValBase (ValBaseBit n))
@@ -890,26 +904,26 @@ module MakeInterpreter (T : Target) = struct
     let third3 (_,_,x) = x in
     match s with
     | SContinue ->
-      begin match v with
-        | ValBase (ValBaseStruct fs)->
+       begin match v with
+       | ValBase (ValBaseStruct fs)->
           eval_struct_mem env st' name fs
-        | ValBase (ValBaseHeader(fs,vbit)) ->
+       | ValBase (ValBaseHeader(fs,vbit)) ->
           eval_header_mem env st' name expr fs vbit
-        | ValBase (ValBaseUnion(fs)) ->
+       | ValBase (ValBaseUnion(fs)) ->
           eval_union_mem env st' name expr fs
-        | ValBase (ValBaseStack(hdrs,s,n)) ->
+       | ValBase (ValBaseStack(hdrs,s,n)) ->
           eval_stack_mem env st' name expr hdrs s n
-        | ValObj (ValObjRuntime (loc, obj_name)) ->
+       | ValObj (ValObjRuntime (loc, obj_name)) ->
           eval_runtime_mem env st' name expr loc obj_name
-        | ValBase (ValBaseRecord fs) ->
+       | ValBase (ValBaseRecord fs) ->
           st', s, ValBase (List.Assoc.find_exn ~equal:P4string.eq fs name)
-        | ValObj (ValObjParser _) | ValObj (ValObjControl _) | ValObj (ValObjTable _) ->
+       | ValObj (ValObjParser _) | ValObj (ValObjControl _) | ValObj (ValObjTable _) ->
           let caller = lvalue_of_expr env st' SContinue expr
-            |> third3
-            |> Option.value_exn in
+                       |> third3
+                       |> Option.value_exn in
           st', s, ValObj (ValObjFun ([], (ValFuncImplBuiltin (name, caller))))
-        | _ -> failwith "type member does not exists"
-      end
+       | _ -> failwith "type member does not exists"
+       end
     | SReject _ -> (st',s,(ValBase ValBaseNull))
     | _ -> failwith "unreachable"
 
@@ -948,46 +962,46 @@ module MakeInterpreter (T : Target) = struct
     let name = name_of_type_ref typ in
     let args' = List.map ~f:(fun arg -> Some arg) args in
     match Eval_env.find_val name env |> extract_from_state st with
-    | VPackage {params;_} ->
+    | ValCons (ValConsPackage (params, _)) ->
       let (_, env,st,s) = (env --> env) st params args' in
       let args = env |> Eval_env.get_val_firstlevel |> List.rev in
-      (st, s, VPackage{params;args;})
-    | VControl {cscope;cconstructor_params;cparams;clocals;apply} ->
+      (st, s, ValObj (ValObjPackage args))
+    | ValCons (ValConsControl (cscope,cconstructor_params,cparams,clocals,apply)) ->
       let (_, cscope,st,s) = (env --> cscope) st cconstructor_params args' in
-      let v = VControl { cscope; cconstructor_params; cparams; clocals; apply; } in
-      (st,s,v)
-    | VParser {pscope;pconstructor_params;pparams;plocals;states} ->
+      let v = ValObjControl ( cscope, cconstructor_params, cparams, clocals, apply) in
+      (st,s,ValObj v)
+    | ValCons (ValConsParser (pscope,pconstructor_params,pparams,plocals,states)) ->
       let (_, pscope,st,s) = (env --> pscope) st pconstructor_params args' in
-      let v = VParser {pscope; pconstructor_params; pparams; plocals; states; } in
-      (st,s,v)
-    | VExternObj ps ->
+      let v = ValObjParser (pscope, pconstructor_params, pparams, plocals, states) in
+      (st,s,ValObj v)
+    | ValCons (ValConsExternObj ps) ->
       let loc = Eval_env.get_namespace env in
       if State.is_initialized loc st
-      then st, SContinue, VRuntime {loc = loc; obj_name = name_only name; }
+      then st, SContinue, ValObj (ValObjRuntime (loc, name_only name))
       else 
-        let params = List.Assoc.find_exn ps (name_only name) ~equal:String.equal in
+        let params = List.Assoc.find_exn ps (name_only name) ~equal:P4string.eq in
         eval_extern_call env st (name_only name) (Some (loc, name_only name)) params [] args'
     | _ -> failwith "instantiation unimplemented"
 
   and eval_mask (env : env) (st : state) (e : coq_Expression)
-      (m : coq_Expression) : state * signal * coq_Value =
+      (m : coq_Expression) : state * signal * coq_ValueSet =
     let (st', s, v1)  = eval_expr env st SContinue e in
     let (st'', s', v2) = eval_expr env st' SContinue m in
     match (s,s') with
     | SContinue, SContinue ->
-      (st'', s, VSet(SMask{v=v1;mask=v2}))
-    | SReject _,_ -> (st',s,(ValBase ValBaseNull))
-    | _,SReject _ -> (st'',s',(ValBase ValBaseNull))
+      (st'', s, ValSetMask (assert_base_val v1, assert_base_val v2))
+    | SReject _,_ -> (st',s, ValSetUniversal)
+    | _,SReject _ -> (st'',s', ValSetUniversal)
     | _ -> failwith "unreachable"
 
   and eval_range (env : env) (st : state) (lo : coq_Expression)
-      (hi : coq_Expression) : state * signal * coq_Value =
+      (hi : coq_Expression) : state * signal * coq_ValueSet =
     let (st', s, v1) = eval_expr env st SContinue lo in
     let (st'',s',v2) = eval_expr env st' SContinue hi in
     match (s,s') with
-    | SContinue, SContinue -> (st'', s, VSet(SRange{lo=v1;hi=v2}))
-    | SReject _,_ -> (st',s,(ValBase ValBaseNull))
-    | _,SReject _ -> (st'',s',(ValBase ValBaseNull))
+    | SContinue, SContinue -> (st'', s, ValSetRange(assert_base_val v1, assert_base_val v2))
+    | SReject _,_ -> (st',s, ValSetUniversal)
+    | _,SReject _ -> (st'',s', ValSetUniversal)
     | _ -> failwith "unreachable"
 
   (*----------------------------------------------------------------------------*)
@@ -995,36 +1009,35 @@ module MakeInterpreter (T : Target) = struct
   (*----------------------------------------------------------------------------*)
 
   and eval_struct_mem (env : env) (st : state) (name : P4string.t)
-      (fs : (string * coq_Value) list) : state * signal * coq_Value =
-    (st, SContinue, (find_exn fs name))
+      (fs : (P4string.t * coq_ValueBase) list) : state * signal * coq_Value =
+    (st, SContinue, List.Assoc.find_exn ~equal:P4string.eq fs name |> ValBase)
 
-  and eval_header_mem (env : env) (st : state) (fname : string)
-      (e : coq_Expression) (fs : (string * coq_Value) list)
+  and eval_header_mem (env : env) (st : state) (fname : P4string.t)
+      (e : coq_Expression) (fs : (P4string.t * coq_ValueBase) list)
       (valid : bool) : state * signal * coq_Value =
-    match fname with
+    match fname.str with
     | "setValid" | "setInvalid" ->
       let (_, _, lv) = lvalue_of_expr env st SContinue e in
-      st, SContinue, VBuiltinFun{name=fname;caller=Option.value_exn lv}
+      st, SContinue, ValObj (ValObjFun ([], ValFuncImplBuiltin(fname, Option.value_exn lv)))
     | "isValid" -> begin try
       let (_, _, lv) = lvalue_of_expr env st SContinue e in
-      st, SContinue, VBuiltinFun{name=fname; caller=Option.value_exn lv}
+      st, SContinue, ValObj (ValObjFun ([], ValFuncImplBuiltin(fname, Option.value_exn lv)))
       with _ -> failwith "TODO: edge case with header isValid()" end
-    | _ -> (st, SContinue, T.read_header_field valid fs fname)
+    | _ -> (st, SContinue, ValBase (T.read_header_field valid fs fname))
 
   and eval_union_mem (env : env) (st : state)
-    (fname : string) (e : coq_Expression) (fs : (string * coq_Value) list)
+    (fname : P4string.t) (e : coq_Expression) (fs : (P4string.t * coq_ValueBase) list)
     : state * signal * coq_Value =
     let (st', signal, lv) = lvalue_of_expr env st SContinue e in
-    match fname with
-    | "isValid" -> begin match signal, lv with
-      | SContinue, Some lv -> st', SContinue, VBuiltinFun{name=fname;caller=lv}
-      | _, _ -> st', signal, (ValBase ValBaseNull) end
-    | _ -> (st, SContinue, (find_exn fs fname))
+    match fname.str with
+    | "isValid" ->
+       st, SContinue, ValObj (ValObjFun ([], ValFuncImplBuiltin(fname, Option.value_exn lv)))
+    | _ -> (st, SContinue, ValBase (List.Assoc.find_exn ~equal:P4string.eq fs fname))
 
-  and eval_stack_mem (env : env) (st : state) (fname : string)
-      (e : coq_Expression) (hdrs : coq_Value list) (size : Bigint.t)
+  and eval_stack_mem (env : env) (st : state) (fname : P4string.t)
+      (e : coq_Expression) (hdrs : coq_ValueBase list) (size : Bigint.t)
       (next : Bigint.t) : state * signal * coq_Value =
-    match fname with
+    match fname.str with
     | "size" -> eval_stack_size env st size
     | "next" -> eval_stack_next env st hdrs size next
     | "last" -> eval_stack_last env st hdrs size next
@@ -1033,61 +1046,65 @@ module MakeInterpreter (T : Target) = struct
       eval_stack_builtin env st fname e
     | _ -> failwith "stack member unimplemented"
 
-  and eval_runtime_mem (env : env) (st : state) (mname : string) (expr : coq_Expression)
-      (loc : loc) (obj_name : string) : state * signal * coq_Value =
-    let params = Eval_env.find_val (BareName (Info.dummy, obj_name)) env
+  and eval_runtime_mem (env : env) (st : state) (mname : P4string.t) (expr : coq_Expression)
+      (loc : loc) (obj_name : P4string.t) : state * signal * coq_Value =
+    let params = Eval_env.find_val (BareName obj_name) env
       |> (fun l -> State.find_heap l st)
       |> assert_externobj
-      |> fun l -> List.Assoc.find_exn l mname ~equal:String.equal in
-    st, SContinue, VExternFun {caller = Some (loc, obj_name); name = mname; params }
+      |> fun l -> List.Assoc.find_exn l mname ~equal:P4string.eq in
+    st, SContinue, ValObj (ValObjFun (params, (ValFuncImplExtern (mname, Some (loc, obj_name)))))
 
   and eval_stack_size (env : env) (st : state)
       (size : Bigint.t) : state * signal * coq_Value =
-    let five = Bigint.(one + one + one + one + one) in
-    let thirty_two = shift_bitstring_left Bigint.one five in
-    (st, SContinue, VBit{w=thirty_two;v=size})
+    (st, SContinue, ValBase (ValBaseBit (Ops.bigint_to_bool_list size)))
 
-  and eval_stack_next (env : env) (st : state) (hdrs : coq_Value list) (size : Bigint.t)
+  and eval_stack_next (env : env) (st : state) (hdrs : coq_ValueBase list) (size : Bigint.t)
       (next : Bigint.t) : state * signal * coq_Value =
     if Bigint.(next >= size)
-    then st, SReject "StackOutOfBounds", (ValBase ValBaseNull)
-    else st, SContinue, List.nth_exn hdrs Bigint.(to_int_exn next)
+    then st, SReject (P4string.dummy "StackOutOfBounds"), (ValBase ValBaseNull)
+    else st, SContinue, List.nth_exn hdrs Bigint.(to_int_exn next) |> ValBase
 
-  and eval_stack_last (env : env) (st : state) (hdrs : coq_Value list) (size : Bigint.t)
+  and eval_stack_last (env : env) (st : state) (hdrs : coq_ValueBase list) (size : Bigint.t)
       (next : Bigint.t) : state * signal * coq_Value =
     if Bigint.(next < one) || Bigint.(next > size)
-    then st, SReject "StackOutOfBounds", (ValBase ValBaseNull)
-    else st, SContinue, List.nth_exn hdrs Bigint.(to_int_exn (next - one))
+    then st, SReject (P4string.dummy "StackOutOfBounds"), (ValBase ValBaseNull)
+    else st, SContinue, List.nth_exn hdrs Bigint.(to_int_exn (next - one)) |> ValBase
 
   and eval_stack_lastindex (env : env) (st : state)
       (next : Bigint.t) : state * signal * coq_Value =
-    st, SContinue, Bigint.(VBit {w= of_int 32; v= next - one})
+    st, SContinue, ValBase (ValBaseBit (next - one))
 
   and eval_stack_builtin (env : env) (st : state) (name : P4string.t)
       (e : coq_Expression) : state * signal * coq_Value =
     let (st', signal, lv) = lvalue_of_expr env st SContinue e in
-    st', signal, VBuiltinFun{name; caller = Option.value_exn lv}
+    match lv with
+    | Some lv ->
+       let func = ValFuncImplBuiltin (name, lv) in
+       st', signal, ValObj (ValObjFun ([], func))
+    | None -> failwith "could not evaluate lval"
 
   (*----------------------------------------------------------------------------*)
   (* Function and Method Call Evaluation *)
   (*----------------------------------------------------------------------------*)
 
   and eval_extern_call (callenv : env) (st : state) (name : P4string.t)
-      (v : (loc * string) option) (params : coq_P4Parameter list) (targs : coq_P4Type list)
+      (v : (loc * P4string.t) option) (params : coq_P4Parameter list) (targs : coq_P4Type list)
       (args : coq_Expression option list) : state * signal * coq_Value =
-    let ts = args |> List.map ~f:(function Some e -> (snd e).typ | None -> Void) in
+    let ts = args |> List.map ~f:(function
+                         | Some (MkExpression (_, _, typ, _)) -> typ
+                         | None -> TypVoid) in
     let params =
       match v with
       | Some (_,t) ->
-        Eval_env.find_val (BareName (Info.dummy, t)) callenv
+        Eval_env.find_val (BareName t) callenv
         |> extract_from_state st
         |> assert_externobj
-        |> List.filter ~f:(fun (s,_) -> String.equal s name)
+        |> List.filter ~f:(fun (s,_) -> P4string.eq s name)
         |> List.filter ~f:(fun (_,ps) -> Int.equal (List.length ps) (List.length args))
         |> List.hd_exn
         |> snd
       | None ->
-        Eval_env.find_val (BareName (Info.dummy, name)) callenv
+        Eval_env.find_val (BareName name) callenv
         |> extract_from_state st
         |> assert_externfun in
     let (_,kvs) =
@@ -1098,14 +1115,15 @@ module MakeInterpreter (T : Target) = struct
     | SExit -> st', SExit, (ValBase ValBaseNull)
     | SReject s -> st', SReject s, (ValBase ValBaseNull)
     | SReturn _ | SContinue ->
-    let tvs = List.zip_exn vs ts in
-    let tvs' = match v with
-      | Some (loc, t) -> (VRuntime {loc = loc; obj_name = t;},
-                          Type.TypeName (BareName (Info.dummy, "packet"))) :: tvs
-      | None -> tvs in
-    let (fenv', st'', s, v) = T.eval_extern name fenv st' targs tvs' in
-    let st'' = (callenv <-- fenv') st'' params lvs in
-    st'', s, v
+       let tvs = List.zip_exn vs ts in
+       let tvs' = match v with
+         | Some (loc, t) -> (ValObj (ValObjRuntime (loc, t)),
+                             TypTypeName (BareName (P4string.dummy "packet")))
+                            :: tvs
+         | None -> tvs in
+       let (fenv', st'', s, v) = T.eval_extern name.str fenv st' targs tvs' in
+       let st'' = (callenv <-- fenv') st'' params lvs in
+       st'', s, v
 
   and eval_funcall' (callenv : env) (st : state) (fscope : env)
       (params : coq_P4Parameter list) (args : coq_Expression option list)
@@ -1150,11 +1168,11 @@ module MakeInterpreter (T : Target) = struct
 
   and eval_nth_arg (env : env) (st : state) (params : coq_P4Parameter list) (i : int)
       (lvs, st, sign : coq_ValueLvalue option list * state * signal)
-      (e : coq_Expression option) : (coq_ValueLvalue option list * state * signal) * (string * coq_Value) =
-    let p = List.nth_exn params i in
+      (e : coq_Expression option) : (coq_ValueLvalue option list * state * signal) * (P4string.t * coq_Value) =
+    let (MkParameter (_, _, typ, _, var))= List.nth_exn params i in
     let ((st',s,lv), n) = match e with
-      | Some expr -> lvalue_of_expr env st SContinue expr, snd p.variable
-      | None -> (st, SContinue, None), snd p.variable in
+      | Some expr -> lvalue_of_expr env st SContinue expr, var
+      | None -> (st, SContinue, None), var in
     let (st', s, v) = match lv with
       | Some lv -> st', s, value_of_lvalue env st' lv |> snd
       | None -> begin match e with
@@ -1167,25 +1185,27 @@ module MakeInterpreter (T : Target) = struct
     | _ -> failwith "unreachable"
 
   and insert_arg (e, st : Eval_env.t * state) (p : coq_P4Parameter)
-      (name, v : string * coq_Value) : env * state =
+      (name, v : P4string.t * coq_Value) : env * state =
     (* TODO: zero out v if dir = out *)
-    let var = Types.BareName p.variable in
+    let (MkParameter (_, _, _, _, var)) = p in
     let l = State.fresh_loc () in
     let st = State.insert_heap l v st in
-    Eval_env.insert_val var l e, st
+    Eval_env.insert_val (BareName var) l e, st
 
   and copy_arg_out (fenv : env) (callenv : env) (st : state) (p : coq_P4Parameter)
       (a : coq_ValueLvalue option) : state =
-    match p.direction with
+    let (MkParameter (_, dir, _, _, _)) = p in
+    match dir with
     | InOut | Out -> copy_arg_out_h fenv st callenv p a
     | In | Directionless -> st
 
   and copy_arg_out_h (fenv : env) (st : state)
       (callenv : env) (p : coq_P4Parameter) (lv : coq_ValueLvalue option) : state =
-    let v = Eval_env.find_val (BareName p.variable) fenv |> extract_from_state st in
+    let (MkParameter (_, _, _, _, var)) = p in
+    let v = Eval_env.find_val (BareName var) fenv |> extract_from_state st in
     match lv with
     | None -> st
-    | Some lv -> assign_lvalue st callenv lv v |> fst
+    | Some lv -> assign_lvalue st callenv lv (assert_base_val v) |> fst
 
   (*----------------------------------------------------------------------------*)
   (* Built-in Function Evaluation *)
@@ -1193,15 +1213,16 @@ module MakeInterpreter (T : Target) = struct
 
   and eval_builtin (ctrl :ctrl) (env : env) (st : state) (name : P4string.t) (lv : coq_ValueLvalue)
       (args : coq_Expression option list) : state * signal * coq_Value =
-    match name with
+    match name.str with
     | "isValid"    -> eval_isvalid env st lv
     | "setValid"   -> eval_setbool env st lv true
     | "setInvalid" -> eval_setbool env st lv false
     | "pop_front"  -> eval_push_pop env st lv args false
     | "push_front" -> eval_push_pop env st lv args true
     | "apply" ->
-      let lvname = match lv.lvalue with
-        | LName {name} -> name
+       let (MkValueLvalue (pre_lv, t)) = lv in
+      let lvname = match pre_lv with
+        | ValLeftName (name, _) -> name
         | _ -> failwith "bad apply" in
       let (s,v) = value_of_lvalue env st lv in
       eval_app ctrl (Eval_env.set_namespace (name_only lvname) env) st s v args
@@ -1212,12 +1233,12 @@ module MakeInterpreter (T : Target) = struct
     let (s,v) = value_of_lvalue env st lv in
     match s, v with
     | (SReturn _ | SExit | SReject _), _ -> (st, s, (ValBase ValBaseNull))
-    | SContinue, VHeader{is_valid=b;_} ->
-      (st, s, VBool b)
-    | SContinue, VUnion{fields} ->
+    | SContinue, ValBase (ValBaseHeader (_, b)) ->
+      (st, s, ValBase (ValBaseBool b))
+    | SContinue, ValBase (ValBaseUnion fields) ->
       let field_valid (_, l) = snd (assert_header l) in
       let valid = List.exists ~f:field_valid fields in
-      (st, s, VBool valid)
+      (st, s, ValBase (ValBaseBool valid))
     | SContinue, _ ->
       failwith "isvalid call is not a header"
 
@@ -1226,9 +1247,9 @@ module MakeInterpreter (T : Target) = struct
     let (s,v) = value_of_lvalue env st lv in
     match s, v with
     | (SReturn _ | SExit | SReject _), _ -> (st, s, (ValBase ValBaseNull))
-    | SContinue, VHeader hdr ->
-       let st, signal = assign_lvalue st env lv (VHeader {hdr with is_valid = b}) in
-       (st, signal, VBool b)
+    | SContinue, ValBase (ValBaseHeader (fields, valid)) ->
+       let st, signal = assign_lvalue st env lv (ValBaseHeader (fields, b)) in
+       (st, signal, ValBase (ValBaseBool b))
     | SContinue, _ ->
        failwith "isvalid call is not a header"
 
@@ -1238,7 +1259,7 @@ module MakeInterpreter (T : Target) = struct
     let (s',v) = value_of_lvalue env st lv in
     let (hdrs, size, next) =
       match v with
-      | VStack{headers=hdrs;size;next} -> (hdrs,size,next)
+      | ValBase (ValBaseStack (hdrs, size, next)) -> (hdrs,size,next)
       | _ -> failwith "push call not a header stack" in
     let x = if b then Bigint.(size - a) else a in
     let (hdrs1, hdrs2) = List.split_n hdrs Bigint.(to_int_exn x) in
