@@ -430,10 +430,10 @@ module MakeInterpreter (T : Target) = struct
     match s with
     | SContinue ->
       begin match v with
-        | ValObj (ValObjParser (pscope,pparams,plocals,states,_)) ->
+        | ValObj (ValObjParser (pscope,_,pparams,plocals,states)) ->
           let (s, st') = eval_parser ctrl env st pparams args pscope plocals states in
           (s, st', ValBase ValBaseNull)
-        | ValObj (ValObjControl (cscope,cparams,clocals,apply,_)) ->
+        | ValObj (ValObjControl (cscope,_,cparams,clocals,apply)) ->
           let (st,s) = eval_control ctrl env st cparams args cscope clocals apply in
           (st,s, ValBase ValBaseNull)
         | ValObj (ValObjTable (MkValTable (name, keys, actions, default_action, const_entries))) ->
@@ -1263,15 +1263,17 @@ module MakeInterpreter (T : Target) = struct
       | _ -> failwith "push call not a header stack" in
     let x = if b then Bigint.(size - a) else a in
     let (hdrs1, hdrs2) = List.split_n hdrs Bigint.(to_int_exn x) in
-    let t = match lv.typ with
-      | Array{typ;_} -> typ
-      | _ -> failwith "not a header stack" in
+    let (MkValueLvalue (pre_lv, t)) = lv in
+    let t = match t with
+      | TypArray (t, size) -> t
+      | _ -> failwith "not a header stack"
+    in
     let hdrs0 = List.init (Bigint.to_int_exn a) ~f:(fun x -> x) in
     let hdrs0 =
-      List.map hdrs0 ~f:(fun _ -> init_val_of_typ env t) in
+      List.map hdrs0 ~f:(fun _ -> assert_base_val (init_val_of_typ env t)) in
     let hdrs' = if b then hdrs0 @ hdrs1 else hdrs2 @ hdrs0 in
     let y = if b then Bigint.(next + a) else Bigint.(next-a) in
-    let v = VStack{headers=hdrs';size;next=y} in
+    let v = ValBaseStack (hdrs', size, y) in
     match s,s' with
     | SContinue, SContinue ->
       let (st', _) = assign_lvalue st' env lv v in (st', s, (ValBase ValBaseNull))
@@ -1301,8 +1303,12 @@ module MakeInterpreter (T : Target) = struct
     match s with
     | SContinue ->
       let (penv, st) = List.fold_left locals ~init:(penv,st) ~f:(fun (e,s) -> eval_declaration ctrl e s) in
-      let states' = List.map states ~f:(fun s -> snd (snd s).name, s) in
-      let start = find_exn states' "start" in
+      let states' =
+        List.map states
+          ~f:(fun s ->
+            let (MkParserState (_, name, _, _)) = s in
+            name, s) in
+      let start = List.Assoc.find_exn ~equal:P4string.eq states' (P4string.dummy "start") in
       let (penv, st, final_state) = eval_state_machine ctrl penv st states' start in
       let st = (env <-- penv) st params lvs in
       (st, final_state)
@@ -1310,11 +1316,9 @@ module MakeInterpreter (T : Target) = struct
     | _ -> failwith "unreachable"
 
   and eval_state_machine (ctrl : ctrl) (env : env) (st : state)
-      (states : (string * coq_ParserState) list)
+      (states : (P4string.t * coq_ParserState) list)
       (state : coq_ParserState) : env * state * signal =
-    let (stms, transition) =
-      match snd state with
-      | {statements=stms; transition=t;_} -> (stms, t) in
+    let (MkParserState (_, _, stms, transition)) = state in
     let f (env, st, sign) stm =
       match sign with
       | SContinue -> eval_stmt ctrl env st sign stm
@@ -1329,41 +1333,43 @@ module MakeInterpreter (T : Target) = struct
     | SExit -> failwith "exit statements not permitted in parsers"
 
   and eval_transition (ctrl : ctrl) (env : env) (st : state)
-      (states : (string * coq_ParserState) list)
-      (transition : Parser.transition) : env * state * signal =
-    match snd transition with
-    | Direct{next = (_, next)} -> eval_direct ctrl env st states next
-    | Select{exprs;cases} -> eval_select ctrl env st states exprs cases
+      (states : (P4string.t * coq_ParserState) list)
+      (transition : coq_ParserTransition) : env * state * signal =
+    match transition with
+    | ParserDirect (_, next) -> eval_direct ctrl env st states next
+    | ParserSelect (_, exprs, cases) -> eval_select ctrl env st states exprs cases
 
   and eval_direct (ctrl : ctrl) (env : env) (st : state)
-      (states : (string * coq_ParserState) list) (next : string) : env * state * signal =
-    match next with
+      (states : (P4string.t * coq_ParserState) list) (next : P4string.t) : env * state * signal =
+    match next.str with
     | "accept" -> env, st, SContinue
-    | "reject" -> env, st, SReject "NoError"
-    | _        -> eval_state_machine ctrl env st states (find_exn states next)
+    | "reject" -> env, st, SReject (P4string.dummy "NoError")
+    | _        ->
+       let next_state = List.Assoc.find_exn ~equal:P4string.eq states next in
+       eval_state_machine ctrl env st states next_state
 
   and eval_select (ctrl : ctrl) (env : env) (st : state)
-      (states : (string * coq_ParserState) list) (exprs : coq_Expression list)
-      (cases : Parser.case list) : env * state * signal =
+      (states : (P4string.t * coq_ParserState) list) (exprs : coq_Expression list)
+      (cases : coq_ParserCase list) : env * state * signal =
     let f (st,s) e =
       let (b,c,d) = eval_expr env st s e in
       ((b,c),d) in
     let ((st', s), vs) = List.fold_map exprs ~init:(st,SContinue) ~f:f in
-    let ws = List.map vs ~f:(width_of_val) in
+    let ws = List.map vs ~f:(fun x -> width_of_val (assert_base_val x)) in
     match s with
     | SContinue ->
-      let g (e,st,s) coq_ValueSet =
+      let g (e,st,s) set =
         let (w,x,y,z) = set_of_case ctrl e st s set ws in
         ((w,x,y),(z,w,x)) in
       let ((env'',st'', s), ss) = List.fold_map cases ~init:(env, st', SContinue) ~f:g in
       let coerce_value_set s =
         match s with
-        | SValueSet {size=si;members=ms;_},e,st ->
+        | ValSetValueSet (si, ms, _),e,st ->
           let h (a,b,c) d =
             let (w,x,y,z) = set_of_matches ctrl a b c d ws in
             ((w,x,y),z) in
           let ((e',st',_),ss) = List.fold_map ms ~init:(e,st,SContinue) ~f:h in
-          (SValueSet {size=si;members=ms;sets=ss},e',st')
+          (ValSetValueSet (si,ms,ss),e',st')
         | x -> x in
       let ss' = List.map ss ~f:coerce_value_set in
       let ms = List.map ss' ~f:(fun (x,y,z) -> (values_match_set st'' vs x, y,z)) in
@@ -1371,10 +1377,10 @@ module MakeInterpreter (T : Target) = struct
                 |> List.map ~f:(fun ((b,env,st),c) -> (b,(env,st,c))) in
       let next = List.Assoc.find ms' true ~equal:Poly.(=) in
       begin match next with
-        | None -> (env'', st'', SReject "NoMatch")
-        | Some (fenv,st,next) ->
-          let next' = snd (snd next).next in
-          eval_direct ctrl fenv st states next' end
+      | None -> (env'', st'', SReject (P4string.dummy "NoMatch"))
+      | Some (fenv,st,next) ->
+         let (MkParserCase (_, _, next')) = next in
+         eval_direct ctrl fenv st states next' end
     | SReject _ -> (env,st', s)
     | _ -> failwith "unreachable"
 
@@ -1387,10 +1393,7 @@ module MakeInterpreter (T : Target) = struct
       (locals : coq_Declaration list) (apply : coq_Block) : state * signal =
     let (lvs, cenv,st,_) = (env --> cscope) st params args in
     let (cenv,st) = List.fold_left locals ~init:(cenv,st) ~f:(fun (e,st) s -> eval_declaration ctrl e st s) in
-    let block =
-      (Info.dummy,
-      {stmt = Statement.BlockStatement {block = apply};
-      typ = Unit}) in
+    let block = MkStatement ((Info.dummy, []), StatBlock apply, StmUnit) in
     let (cenv, st, sign) = eval_stmt ctrl cenv st SContinue block in
     (env <-- cenv) st params lvs, sign
 
@@ -1399,14 +1402,14 @@ module MakeInterpreter (T : Target) = struct
   (*----------------------------------------------------------------------------*)  
 
   and set_of_case (ctrl : ctrl) (env : env) (st : state) (s : signal)
-      (case : Parser.case) (ws : Bigint.t list) : env * state * signal * coq_ValueSet =
+      (case : coq_ParserCase) (ws : Bigint.t list) : env * state * signal * coq_ValueSet =
     match s with
     | SContinue -> set_of_matches ctrl env st s (snd case).matches ws
     | SReject _ -> (env,st,s,SUniversal)
     | _ -> failwith "unreachable"
 
   and set_of_matches (ctrl : ctrl) (env : env) (st : state) (s : signal)
-      (ms : Match.t list) (ws : Bigint.t list) : env * state * signal * coq_ValueSet =
+      (ms : coq_Match list) (ws : Bigint.t list) : env * state * signal * coq_ValueSet =
     match ms,ws with
     | [],_ -> failwith "invalid set"
     | [m],[w] -> set_of_match ctrl env st s m w
@@ -1418,7 +1421,7 @@ module MakeInterpreter (T : Target) = struct
       (env',st',s,SProd l')
 
   and set_of_match (ctrl : ctrl) (env : env) (st : state) (s : signal)
-      (m : Match.t) (w : Bigint.t) : env * state * signal * coq_ValueSet =
+      (m : coq_Match) (w : Bigint.t) : env * state * signal * coq_ValueSet =
     match s with
     | SContinue ->
       begin match (snd m).expr with
@@ -1431,13 +1434,13 @@ module MakeInterpreter (T : Target) = struct
 
   and values_match_set (st : state) (vs : coq_Value list) (s : coq_ValueSet) : bool =
     match s with
-    | SSingleton{w;v}     -> values_match_singleton vs v
-    | SUniversal          -> true
-    | SMask{v=v1;mask=v2} -> values_match_mask st vs v1 v2
-    | SRange{lo=v1;hi=v2} -> values_match_range vs v1 v2
-    | SProd l             -> values_match_prod st vs l
-    | SLpm{w=v1;v=v2;_}   -> values_match_mask st vs v1 v2
-    | SValueSet {sets=ss;_}   -> values_match_value_set st vs ss
+    | ValSetSingleton v -> values_match_singleton vs v
+    | ValSetUniversal -> true
+    | ValSetMask (v1, v2) -> values_match_mask st vs v1 v2
+    | ValSetRange (v1, v2) -> values_match_range vs v1 v2
+    | ValSetProd l -> values_match_prod st vs l
+    | ValSetLpm (v1, v2) -> values_match_mask st vs v1 v2
+    | ValSetValueSet (_, _, ss) -> values_match_value_set st vs ss
 
   and values_match_singleton (vs : coq_Value list) (n : Bigint.t) : bool =
     let v = List.hd_exn vs in
