@@ -6,7 +6,7 @@ jobs:
     strategy:
       matrix:
         coq_version: ['8.13.2']
-        ocaml_version: ['4.12.0']
+        ocaml_version: ['4.12.0-flambda']
       fail-fast: false  # don't stop jobs if one fails
     steps:
       - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
