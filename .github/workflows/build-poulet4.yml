@@ -19,9 +19,13 @@ jobs:
           repository: jsarracino/mirrorsolve
       - name: Check out petr4
         uses: actions/checkout@v2
+        with:
+          path: petr4
       - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
       - name: List files in the repository
         run: |
+          ls ${{ github.workspace }}/../../
+          ls ${{ github.workspace }}/../
           ls ${{ github.workspace }}
       - name: Run docker-coq-action
         uses: coq-community/docker-coq-action@v1
@@ -32,7 +36,7 @@ jobs:
           install: |
             startGroup "Install dependencies"
               opam pin add -n -y -k path $PACKAGE $WORKDIR
-              opam pin add -n -y -k path mirrorsolve $GITHUB_WORKSPACE/mirrorsolve
+              opam pin add -n -y -k path mirrorsolve ${{ github.workspace }}/mirrorsolve
               opam update -y
               opam install -y -j 2 $PACKAGE --deps-only
             endGroup
