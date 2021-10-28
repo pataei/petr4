@@ -5,20 +5,29 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        coq_version: ['8.13.2']
-        ocaml_version: ['4.12.0-flambda']
+        coq_version: ["8.13.2"]
+        ocaml_version: ["4.12.0-flambda"]
       fail-fast: false  # don't stop jobs if one fails
     steps:
       - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
       - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
       - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-      - name: Check out repository code
+      - name: Install OCaml ${{ matrix.ocaml_version }} and OPAM.
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml_version }}
+      - name: Check out mirrorsolve
+        uses: actions/checkout@v2
+        with:
+          repository: "jsarracino/mirrorsolve"
+      - name: Check out petr4
         uses: actions/checkout@v2
       - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
       - name: List files in the repository
         run: |
           ls ${{ github.workspace }}
-      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
+      - name: Install mirrorsolve.
+        run: opam install ./mirrorsolve
       - name: Run docker-coq-action
         uses: coq-community/docker-coq-action@v1
         with:
