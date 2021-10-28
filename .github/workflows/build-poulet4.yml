@@ -12,10 +12,6 @@ jobs:
       - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
       - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
       - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-      - name: Install OCaml ${{ matrix.ocaml_version }} and OPAM.
-        uses: ocaml/setup-ocaml@v2
-        with:
-          ocaml-compiler: ${{ matrix.ocaml_version }}
       - name: Check out mirrorsolve
         uses: actions/checkout@v2
         with:
@@ -26,13 +22,19 @@ jobs:
       - name: List files in the repository
         run: |
           ls ${{ github.workspace }}
-      - name: Install mirrorsolve.
-        run: opam install ./mirrorsolve
       - name: Run docker-coq-action
         uses: coq-community/docker-coq-action@v1
         with:
           opam_file: 'deps/poulet4/poulet4.opam'
           coq_version: ${{ matrix.coq_version }}
           ocaml_version: ${{ matrix.ocaml_version }}
+          install: |
+            startGroup "Install dependencies"
+              opam pin add -n -y -k path $PACKAGE $WORKDIR
+              opam pin add -n -y -k path mirrorsolve $WORKDIR/../mirrorsolve
+              opam update -y
+              opam install -y -j 2 $PACKAGE --deps-only
+            endGroup
+
       - run: echo "🍏 This job's status is ${{ job.status }}."
 
