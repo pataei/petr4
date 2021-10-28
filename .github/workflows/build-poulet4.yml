@@ -1,7 +1,7 @@
 name: Coq build
 on: [push]
 jobs:
-  Explore-GitHub-Actions:
+  build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -15,6 +15,9 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v2
       - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
       - run: echo "🖥️ The workflow is now ready to test your code on the runner."
       - name: Run docker-coq-action
         uses: coq-community/docker-coq-action@v1
@@ -22,8 +25,5 @@ jobs:
           opam_file: 'folder/coq-proj.opam'
           coq_version: ${{ matrix.coq_version }}
           ocaml_version: ${{ matrix.ocaml_version }}
-      - name: List files in the repository
-        run: |
-          ls ${{ github.workspace }}
       - run: echo "🍏 This job's status is ${{ job.status }}."
 
