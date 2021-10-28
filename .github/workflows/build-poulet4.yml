@@ -39,7 +39,7 @@ jobs:
           install: |
             startGroup "Install dependencies"
               opam pin add -n -y -k path $PACKAGE $WORKDIR
-              opam pin add -n -y -k path mirrorsolve ${{ github.workspace }}/mirrorsolve
+              opam pin add -n -y -k path mirrorsolve file:///github/workspace/mirrorsolve
               opam update -y
               opam install -y -j 2 $PACKAGE --deps-only
             endGroup
