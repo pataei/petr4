@@ -15,7 +15,8 @@ jobs:
       - name: Check out mirrorsolve
         uses: actions/checkout@v2
         with:
-          repository: "jsarracino/mirrorsolve"
+          path: mirrorsolve
+          repository: jsarracino/mirrorsolve
       - name: Check out petr4
         uses: actions/checkout@v2
       - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
@@ -31,7 +32,7 @@ jobs:
           install: |
             startGroup "Install dependencies"
               opam pin add -n -y -k path $PACKAGE $WORKDIR
-              opam pin add -n -y -k path mirrorsolve $WORKDIR/../mirrorsolve
+              opam pin add -n -y -k path mirrorsolve $GITHUB_WORKSPACE/mirrorsolve
               opam update -y
               opam install -y -j 2 $PACKAGE --deps-only
             endGroup
