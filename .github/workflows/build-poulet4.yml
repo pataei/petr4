@@ -43,6 +43,12 @@ jobs:
               opam update -y
               opam install -y -j 2 $PACKAGE --deps-only
             endGroup
+          script: |
+            startGroup "Build"
+              make -C $WORKDIR benchmarks-all
+              opam install -y -v -j 2 $PACKAGE --assume-built
+              opam list
+            endGroup
 
       - run: echo "🍏 This job's status is ${{ job.status }}."
 
