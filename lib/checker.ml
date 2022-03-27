@@ -847,6 +847,11 @@ and type_expression (env: CheckerEnv.t) (ctx: Typed.ExprContext.t) (exp_info, ex
        type_int i
     | Name name ->
        let typ, dir = CheckerEnv.find_type_of name env in
+       let open Types in 
+       Printf.printf "type expression--name %s \n%!" ( (name_only name));
+       Printf.printf "type expression--typ %s \n%!" (Typed.Type.show typ);
+       Printf.printf "type expression--env %s \n%!" (CheckerEnv.show env);
+       (* Printf.printf "type expression-- dir %s \n%!" dir); *)
        { expr = E.Name name;
          typ = typ;
          dir = dir }

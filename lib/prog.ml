@@ -1802,6 +1802,7 @@ end = struct
       find_opt name env.typ_of
 
     let find_type_of name env =
+      (* Printf.printf "find type of %s \n%!" (show env); *)
       opt_to_exn name (find_type_of_opt name env)
 
     let find_types_of name env =
