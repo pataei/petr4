@@ -847,10 +847,10 @@ and type_expression (env: CheckerEnv.t) (ctx: Typed.ExprContext.t) (exp_info, ex
        type_int i
     | Name name ->
        let typ, dir = CheckerEnv.find_type_of name env in
-       let open Types in 
-       Printf.printf "type expression--name %s \n%!" ( (name_only name));
-       Printf.printf "type expression--typ %s \n%!" (Typed.Type.show typ);
-       Printf.printf "type expression--env %s \n%!" (CheckerEnv.show env);
+       (* let open Types in  *)
+       (* Printf.printf "type expression--name %s \n%!" ( (name_only name)); *)
+       (* Printf.printf "type expression--typ %s \n%!" (Typed.Type.show typ); *)
+       (* Printf.printf "type expression--env %s \n%!" (CheckerEnv.show env); *)
        (* Printf.printf "type expression-- dir %s \n%!" dir); *)
        { expr = E.Name name;
          typ = typ;
@@ -2923,8 +2923,10 @@ and insert_params (env: CheckerEnv.t) (params: Types.Parameter.t list) : Checker
   let insert_param env (_, p) =
     let typ = translate_type env [] p.typ in
     let dir = translate_direction p.direction in
+    Printf.printf "insert param %s \n%!" (snd p.variable);
     CheckerEnv.insert_dir_type_of (BareName p.variable) typ dir env
   in
+  Printf.printf "insert params %s \n%!" (CheckerEnv.show env);
   List.fold_left ~f:insert_param ~init:env params
 
 (* Section 10.3 *)
