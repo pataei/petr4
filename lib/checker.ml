@@ -828,6 +828,7 @@ and compile_time_known_expr (env: CheckerEnv.t) (expr: Prog.Expression.t) : bool
 
 and type_expression (env: CheckerEnv.t) (ctx: Typed.ExprContext.t) (exp_info, exp: Expression.t)
     : Prog.Expression.t =
+  Printf.printf "type expression -- exp is %s \n%!" (Expression.show (exp_info, exp));
   let module E = Prog.Expression in
   let pre_expr : E.typed_t =
     match exp with
@@ -2926,7 +2927,7 @@ and insert_params (env: CheckerEnv.t) (params: Types.Parameter.t list) : Checker
     Printf.printf "insert param %s \n%!" (snd p.variable);
     CheckerEnv.insert_dir_type_of (BareName p.variable) typ dir env
   in
-  Printf.printf "insert params %s \n%!" (CheckerEnv.show env);
+  (* Printf.printf "insert params %s \n%!" (CheckerEnv.show env); *)
   List.fold_left ~f:insert_param ~init:env params
 
 (* Section 10.3 *)
